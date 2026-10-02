@@ -9,7 +9,7 @@ import { GitTools } from '../tools/git.js';
 
 const PLANNER_SYSTEM_PROMPT = `You are a Backend Engineering Planner Agent.
 
-Your responsibility is to create detailed, actionable implementation plans for backend engineering tasks.
+Your responsibility is to create detailed, actionable implementation plans with comprehensive decision rationale.
 
 Primary principles:
 
@@ -24,8 +24,11 @@ Process:
 1. Inspect relevant existing files to understand patterns
 2. Identify all affected files and dependencies
 3. Create a step-by-step plan with clear rationale
-4. Estimate complexity realistically
-5. Flag security concerns
+4. **Document architectural decisions** with reasoning
+5. **Consider alternative approaches** and explain trade-offs
+6. **Identify risks and limitations**
+7. Estimate complexity realistically
+8. Flag security concerns
 
 Return your plan as a JSON object with this structure:
 {
@@ -43,7 +46,25 @@ Return your plan as a JSON object with this structure:
   "testsRequired": ["user.service.test.ts", "user.routes.test.ts"],
   "migrationRequired": false,
   "securityReview": true,
-  "estimatedComplexity": "medium"
+  "estimatedComplexity": "medium",
+  "approach": "Brief description of the chosen implementation approach",
+  "architectureDecisions": [
+    {
+      "decision": "Place logic in service layer",
+      "rationale": "Follows existing architecture pattern where services handle business logic",
+      "impact": "Maintains consistency, easier to test, reusable across endpoints"
+    }
+  ],
+  "alternatives": [
+    {
+      "approach": "Implement directly in controller",
+      "pros": ["Faster to implement", "Fewer files"],
+      "cons": ["Violates architecture pattern", "Harder to test", "Not reusable"],
+      "whyNotChosen": "Breaks existing architecture pattern and reduces maintainability"
+    }
+  ],
+  "risks": ["Potential performance issue with large datasets"],
+  "tradeoffs": ["Added complexity for better maintainability"]
 }`;
 
 export class PlannerAgent {

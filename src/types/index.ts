@@ -8,6 +8,8 @@ export interface AgentConfig {
   maxAttempts: number;
   approvalMode: 'manual' | 'auto' | 'suggest-only';
   targetRepoPath: string;
+  confirmPlan?: boolean;
+  generateSummary?: boolean;
 }
 
 export interface Task {
@@ -34,6 +36,25 @@ export interface ImplementationPlan {
   migrationRequired: boolean;
   securityReview: boolean;
   estimatedComplexity: 'low' | 'medium' | 'high';
+  // NEW: Decision rationale
+  approach: string;
+  architectureDecisions: ArchitectureDecision[];
+  alternatives: AlternativeApproach[];
+  risks: string[];
+  tradeoffs: string[];
+}
+
+export interface ArchitectureDecision {
+  decision: string;
+  rationale: string;
+  impact: string;
+}
+
+export interface AlternativeApproach {
+  approach: string;
+  pros: string[];
+  cons: string[];
+  whyNotChosen: string;
 }
 
 export interface PlanStep {
@@ -81,4 +102,36 @@ export interface FileChange {
   action: 'create' | 'modify' | 'delete';
   content?: string;
   diff?: string;
+}
+
+export interface TaskSummary {
+  taskId: string;
+  description: string;
+  timestamp: Date;
+  approach: string;
+  keyDecisions: KeyDecision[];
+  alternatives: AlternativeSummary[];
+  limitations: string[];
+  testScenarios: TestScenario[];
+  filesChanged: string[];
+  complexity: 'low' | 'medium' | 'high';
+}
+
+export interface KeyDecision {
+  decision: string;
+  reasoning: string;
+  impact: string;
+  category: 'architecture' | 'security' | 'performance' | 'maintainability' | 'product';
+}
+
+export interface AlternativeSummary {
+  approach: string;
+  whyNotChosen: string;
+  tradeoff: string;
+}
+
+export interface TestScenario {
+  scenario: string;
+  steps: string[];
+  expectedResult: string;
 }

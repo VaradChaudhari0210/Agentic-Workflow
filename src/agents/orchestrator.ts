@@ -8,10 +8,12 @@ import { PlannerAgent } from './planner.js';
 import { ImplementerAgent } from './implementer.js';
 import { ReviewerAgent } from './reviewer.js';
 import { DiscoveryAgent } from './discovery.js';
+import { SummaryGeneratorAgent } from './summary-generator.js';
 import { FilesystemTools } from '../tools/filesystem.js';
 import { GitTools } from '../tools/git.js';
 import { ShellTools } from '../tools/shell.js';
 import chalk from 'chalk';
+import { createInterface } from 'readline';
 
 export class OrchestratorAgent {
   private client: Anthropic;
@@ -19,6 +21,7 @@ export class OrchestratorAgent {
   private implementer: ImplementerAgent;
   private reviewer: ReviewerAgent;
   private discovery: DiscoveryAgent;
+  private summaryGenerator: SummaryGeneratorAgent;
   private fsTools: FilesystemTools;
   private gitTools: GitTools;
   private shellTools: ShellTools;
@@ -33,6 +36,7 @@ export class OrchestratorAgent {
     this.implementer = new ImplementerAgent(this.client, this.config.model, this.fsTools, this.gitTools, this.shellTools);
     this.reviewer = new ReviewerAgent(this.client, this.config.model, this.fsTools, this.gitTools);
     this.discovery = new DiscoveryAgent(this.client, this.config.model, this.fsTools, this.gitTools);
+    this.summaryGenerator = new SummaryGeneratorAgent(this.client, this.config.model);
   }
 
   async executeTask(description: string): Promise<Task> {
@@ -76,6 +80,22 @@ export class OrchestratorAgent {
       console.log(chalk.dim(`  • ${plan.steps.length} steps`));
       console.log(chalk.dim(`  • ${plan.affectedFiles.length} files to modify`));
       console.log(chalk.dim(`  • Complexity: ${plan.estimatedComplexity}\n`));
+
+      // Show plan details if confirmPlan mode is enabled
+      if (this.config.confirmPlan) {
+        await this.displayPlanForConfirmation(plan);
+        
+        const approved = await this.promptForPlanApproval();
+        
+        if (!approved) {
+          console.log(chalk.yellow('\n✗ Plan rejected by user\n'));
+          task.status = 'failed';
+          task.error = 'Plan not approved';
+          return task;
+        }
+        
+        console.log(chalk.green('\n✓ Plan approved. Proceeding with implementation...\n'));
+      }
 
       // Create a branch for this work
       const branchName = `agent/task-${task.id}`;
@@ -170,6 +190,11 @@ export class OrchestratorAgent {
       console.log(chalk.dim(`Branch: ${branchName}`));
       console.log(chalk.dim('Review the changes and merge when ready.\n'));
 
+      // Generate task summary if enabled
+      if (this.config.generateSummary !== false) { // Default true
+        await this.generateTaskSummary(task.description, plan, implementationResult, branchName);
+      }
+
     } catch (error) {
       task.status = 'failed';
       task.error = error instanceof Error ? error.message : String(error);
@@ -181,6 +206,129 @@ export class OrchestratorAgent {
 
   private generateTaskId(): string {
     return Date.now().toString(36) + Math.random().toString(36).substring(2, 9);
+  }
+
+  private async displayPlanForConfirmation(plan: any): Promise<void> {
+    console.log(chalk.blue('\n╔══════════════════════════════════════════════════════════╗'));
+    console.log(chalk.blue('║') + chalk.bold('  Implementation Plan Review') + chalk.blue('                          ║'));
+    console.log(chalk.blue('╚══════════════════════════════════════════════════════════╝\n'));
+    
+    // Approach
+    console.log(chalk.cyan('Approach:'));
+    console.log(chalk.dim(plan.approach));
+    console.log('');
+    
+    // Key Architecture Decisions
+    if (plan.architectureDecisions && plan.architectureDecisions.length > 0) {
+      console.log(chalk.cyan('Key Decisions:'));
+      plan.architectureDecisions.forEach((decision: any) => {
+        console.log(chalk.yellow(`  • ${decision.decision}`));
+        console.log(chalk.dim(`    Reasoning: ${decision.rationale}`));
+        console.log(chalk.dim(`    Impact: ${decision.impact}`));
+      });
+      console.log('');
+    }
+    
+    // Alternatives Considered
+    if (plan.alternatives && plan.alternatives.length > 0) {
+      console.log(chalk.cyan('Alternatives Considered:'));
+      plan.alternatives.forEach((alt: any) => {
+        console.log(chalk.yellow(`  ✗ ${alt.approach}`));
+        console.log(chalk.dim(`    Pros: ${alt.pros.join(', ')}`));
+        console.log(chalk.dim(`    Cons: ${alt.cons.join(', ')}`));
+        console.log(chalk.dim(`    Not chosen: ${alt.whyNotChosen}`));
+      });
+      console.log('');
+    }
+    
+    // Risks & Trade-offs
+    if (plan.risks && plan.risks.length > 0) {
+      console.log(chalk.cyan('Risks:'));
+      plan.risks.forEach((risk: string) => {
+        console.log(chalk.yellow(`  ⚠️  ${risk}`));
+      });
+      console.log('');
+    }
+    
+    if (plan.tradeoffs && plan.tradeoffs.length > 0) {
+      console.log(chalk.cyan('Trade-offs:'));
+      plan.tradeoffs.forEach((tradeoff: string) => {
+        console.log(chalk.dim(`  ⚖️  ${tradeoff}`));
+      });
+      console.log('');
+    }
+    
+    // Implementation Steps
+    console.log(chalk.cyan('Implementation Steps:'));
+    plan.steps.forEach((step: any, idx: number) => {
+      console.log(chalk.dim(`  ${idx + 1}. ${step.action} ${step.target}`));
+      console.log(chalk.dim(`     ${step.description}`));
+    });
+    console.log('');
+    
+    // Summary
+    console.log(chalk.cyan('Summary:'));
+    console.log(chalk.dim(`  • Files to modify: ${plan.affectedFiles.length}`));
+    console.log(chalk.dim(`  • New files: ${plan.newFiles.length}`));
+    console.log(chalk.dim(`  • Tests required: ${plan.testsRequired.length}`));
+    console.log(chalk.dim(`  • Complexity: ${plan.estimatedComplexity}`));
+    console.log('');
+  }
+
+  private async promptForPlanApproval(): Promise<boolean> {
+    // In non-interactive mode, default to approved
+    if (process.env.CI || !process.stdin.isTTY) {
+      console.log(chalk.green('✓ Auto-approved (non-interactive mode)\n'));
+      return true;
+    }
+    
+    const readline = createInterface({
+      input: process.stdin,
+      output: process.stdout
+    });
+    
+    return new Promise((resolve) => {
+      readline.question(
+        chalk.cyan('Do you approve this plan? (y/n): '),
+        (answer) => {
+          readline.close();
+          resolve(answer.toLowerCase() === 'y' || answer.toLowerCase() === 'yes');
+        }
+      );
+    });
+  }
+
+  private async generateTaskSummary(
+    description: string,
+    plan: any,
+    implementation: any,
+    branchName: string
+  ): Promise<void> {
+    try {
+      console.log(chalk.yellow('📝 Generating task summary...'));
+      
+      const summary = await this.summaryGenerator.generateSummary(
+        description,
+        plan,
+        implementation
+      );
+      
+      const markdown = this.summaryGenerator.formatSummaryAsMarkdown(summary);
+      
+      // Save summary to .agent/summaries/
+      const summaryPath = `.agent/summaries/task-${summary.taskId}.md`;
+      const writeResult = await this.fsTools.writeFile(summaryPath, markdown);
+      
+      if (writeResult.success) {
+        console.log(chalk.green('✓ Task summary generated'));
+        console.log(chalk.dim(`  Saved to: ${summaryPath}\n`));
+      } else {
+        console.log(chalk.yellow('⚠️  Could not save summary:'), writeResult.error);
+      }
+    } catch (error) {
+      console.log(chalk.yellow('⚠️  Summary generation failed:'), error);
+      console.log(chalk.dim('   Task completed successfully, but summary could not be generated\n'));
+    }
   }
 
   private async promptUserForDiscovery(): Promise<boolean> {

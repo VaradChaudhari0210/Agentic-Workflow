@@ -27,6 +27,8 @@ program
   .option('-m, --model <model>', 'Claude model to use', process.env.MODEL || 'claude-sonnet-4-20250514')
   .option('--max-attempts <number>', 'Maximum implementation attempts', '3')
   .option('--approval <mode>', 'Approval mode: manual, auto, or suggest-only', 'manual')
+  .option('--confirm-plan', 'Review and approve plan before implementation', false)
+  .option('--no-summary', 'Skip generating task summary', false)
   .action(async (description: string, options) => {
     const apiKey = process.env.ANTHROPIC_API_KEY;
     
@@ -40,7 +42,9 @@ program
       model: options.model,
       maxAttempts: parseInt(options.maxAttempts),
       approvalMode: options.approval,
-      targetRepoPath: options.repo
+      targetRepoPath: options.repo,
+      confirmPlan: options.confirmPlan,
+      generateSummary: options.summary !== false
     };
 
     const orchestrator = new OrchestratorAgent(agentConfig);
