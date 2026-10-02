@@ -77,26 +77,41 @@ ANTHROPIC_API_KEY=your_api_key_here
 TARGET_REPO_PATH=../your-backend-repo
 ```
 
-## Usage
+## Quick Start
 
-### Initialize Agent Knowledge Base
+### Auto-Discovery (Recommended)
 
-First, initialize the agent knowledge base in your target repository:
+The agent can automatically analyze your repository and generate the `.agent/` knowledge base:
 
 ```bash
-npm run dev init /path/to/your/repo
+# Discover patterns and generate .agent/ files
+npm run dev discover /path/to/your/backend/project
+
+# Review the generated files in /path/to/your/backend/project/.agent/
+# Edit them to match your exact requirements
+
+# Run your first task
+npm run dev task "Add health check endpoint" --repo /path/to/your/backend/project
 ```
 
-This creates a `.agent/` directory with:
-- `architecture.md` - Your system architecture
-- `conventions.md` - Coding conventions
-- `database.md` - Database patterns
-- `api.md` - API conventions
-- `security.md` - Security requirements
-- `testing.md` - Testing practices
-- `decisions/` - Architecture Decision Records
+**What auto-discovery does:**
+- 🔍 Scans your entire codebase
+- 📊 Detects framework, database, patterns
+- 📝 Generates architecture documentation
+- ✅ Creates conventions guide
+- 🔒 Documents security patterns
+- 🧪 Identifies testing practices
 
-**Important**: Edit these files to match your actual project!
+**Time:** 30-60 seconds for discovery
+
+### Manual Setup (Alternative)
+
+If you prefer to create the files manually:
+
+```bash
+npm run dev init /path/to/your/backend/project
+# Then manually edit the template files in .agent/
+```
 
 ### Run a Task
 

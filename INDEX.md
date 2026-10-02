@@ -8,15 +8,20 @@ Start here if you're new:
 
 1. **[QUICKSTART.md](./QUICKSTART.md)** ⭐
    - 5-minute setup guide
-   - First task walkthrough
-   - Quick start commands
+   - Auto-discovery walkthrough
+   - First task example
 
-2. **[GETTING_STARTED.md](./GETTING_STARTED.md)** ⭐
+2. **[AUTO_DISCOVERY.md](./AUTO_DISCOVERY.md)** ⭐ NEW!
+   - Automatic repository analysis
+   - How auto-discovery works
+   - Customizing generated files
+
+3. **[GETTING_STARTED.md](./GETTING_STARTED.md)**
    - Complete setup checklist
    - Step-by-step verification
    - Troubleshooting common issues
 
-3. **[PROJECT_SUMMARY.md](./PROJECT_SUMMARY.md)**
+4. **[PROJECT_SUMMARY.md](./PROJECT_SUMMARY.md)**
    - What you've built
    - Core capabilities
    - Key design decisions

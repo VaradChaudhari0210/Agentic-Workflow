@@ -57,8 +57,53 @@ program
   .command('init')
   .description('Initialize agent knowledge base in target repository')
   .argument('[repo-path]', 'Path to target repository', '.')
-  .action(async (repoPath: string) => {
+  .option('--auto-discover', 'Automatically discover patterns', false)
+  .action(async (repoPath: string, options) => {
     console.log(chalk.blue('Initializing agent knowledge base...\n'));
+    
+    if (options.autoDiscover) {
+      // Use auto-discovery
+      const apiKey = process.env.ANTHROPIC_API_KEY;
+      
+      if (!apiKey) {
+        console.error(chalk.red('Error: ANTHROPIC_API_KEY required for auto-discovery'));
+        console.log(chalk.yellow('Tip: Use init without --auto-discover for template-based setup'));
+        process.exit(1);
+      }
+
+      const agentConfig: AgentConfig = {
+        apiKey,
+        model: process.env.MODEL || 'claude-sonnet-4-20250514',
+        maxAttempts: 3,
+        approvalMode: 'manual',
+        targetRepoPath: repoPath
+      };
+
+      const orchestrator = new OrchestratorAgent(agentConfig);
+      
+      console.log(chalk.yellow('🔍 Analyzing repository...\n'));
+      
+      // Access private method through a public interface
+      // For now, we'll create a public method
+      console.log(chalk.yellow('Running auto-discovery...'));
+      console.log(chalk.dim('This may take 30-60 seconds\n'));
+      
+      // We'll trigger discovery by trying to execute a dummy task
+      // The orchestrator will auto-discover first
+      process.env.SKIP_DISCOVERY = 'false';
+      
+      try {
+        // Instead, let's add a public discover method
+        console.log(chalk.red('Error: Direct discovery not yet implemented'));
+        console.log(chalk.yellow('Use: npm run dev task "your task" instead'));
+        console.log(chalk.dim('The first task will trigger auto-discovery\n'));
+      } catch (error) {
+        console.error(chalk.red('Discovery failed:'), error);
+        process.exit(1);
+      }
+      
+      return;
+    }
     
     const agentDir = join(repoPath, '.agent');
     
@@ -307,6 +352,153 @@ Example: ADR-001-authentication-strategy.md
     
     console.log(chalk.green('\n✓ Agent knowledge base initialized'));
     console.log(chalk.dim('\nEdit the files in .agent/ to customize for your project.'));
+  });
+
+program
+  .command('discover')
+  .description('Auto-discover repository patterns and generate .agent/ knowledge base')
+  .argument('[repo-path]', 'Path to target repository', '.')
+  .action(async (repoPath: string) => {
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    
+    if (!apiKey) {
+      console.error(chalk.red('Error: ANTHROPIC_API_KEY environment variable is required'));
+      process.exit(1);
+    }
+
+    console.log(chalk.blue('\n╔══════════════════════════════════════════════════════════╗'));
+    console.log(chalk.blue('║') + chalk.bold('  Repository Auto-Discovery') + chalk.blue('                           ║'));
+    console.log(chalk.blue('╚══════════════════════════════════════════════════════════╝\n'));
+    console.log(chalk.cyan('Target:'), repoPath);
+    console.log(chalk.dim('─'.repeat(60)) + '\n');
+
+    const agentConfig: AgentConfig = {
+      apiKey,
+      model: process.env.MODEL || 'claude-sonnet-4-20250514',
+      maxAttempts: 3,
+      approvalMode: 'manual',
+      targetRepoPath: repoPath
+    };
+
+    try {
+      const orchestrator = new OrchestratorAgent(agentConfig);
+      
+      // We need to expose the discovery as a public method
+      // For now, we'll import and use the DiscoveryAgent directly
+      const { DiscoveryAgent } = await import('./agents/discovery.js');
+      const { FilesystemTools } = await import('./tools/filesystem.js');
+      const { GitTools } = await import('./tools/git.js');
+      const Anthropic = (await import('@anthropic-ai/sdk')).default;
+      
+      const client = new Anthropic({ apiKey });
+      const fsTools = new FilesystemTools(repoPath);
+      const gitTools = new GitTools(repoPath);
+      const discoveryAgent = new DiscoveryAgent(client, agentConfig.model, fsTools, gitTools);
+      
+      console.log(chalk.yellow('🔍 Analyzing repository patterns...\n'));
+      console.log(chalk.dim('This may take 30-60 seconds depending on repository size\n'));
+      
+      const discoveryResult = await discoveryAgent.discoverRepository();
+      
+      console.log(chalk.green('✓ Repository analyzed'));
+      console.log(chalk.dim(`  Confidence: ${discoveryResult.confidence}\n`));
+      
+      // Create .agent directory structure
+      const agentFiles = [
+        { path: '.agent/instructions.md', name: 'Instructions' },
+        { path: '.agent/architecture.md', name: 'Architecture', content: discoveryResult.architecture },
+        { path: '.agent/conventions.md', name: 'Conventions', content: discoveryResult.conventions },
+        { path: '.agent/database.md', name: 'Database', content: discoveryResult.database },
+        { path: '.agent/api.md', name: 'API Patterns', content: discoveryResult.api },
+        { path: '.agent/security.md', name: 'Security', content: discoveryResult.security },
+        { path: '.agent/testing.md', name: 'Testing', content: discoveryResult.testing },
+      ];
+      
+      const instructionsContent = `# Backend Engineering Instructions
+
+This directory contains knowledge and instructions for the Backend Engineer Agent.
+
+**Auto-generated on:** ${new Date().toISOString()}
+**Confidence Level:** ${discoveryResult.confidence}
+
+## Files
+
+- \`architecture.md\` - System architecture (auto-detected)
+- \`conventions.md\` - Coding conventions (auto-detected)
+- \`database.md\` - Database patterns (auto-detected)
+- \`api.md\` - API conventions (auto-detected)
+- \`security.md\` - Security requirements (auto-detected)
+- \`testing.md\` - Testing practices (auto-detected)
+- \`decisions/\` - Architecture Decision Records (add your own)
+
+## Important: Review Required
+
+These files were auto-generated by analyzing your codebase. Please:
+
+1. ✅ Review each file for accuracy
+2. ✅ Correct any misunderstandings
+3. ✅ Add project-specific details
+4. ✅ Document special requirements
+5. ✅ Add ADRs in decisions/ folder
+
+The agent learns from these files and follows your documented patterns.
+`;
+      
+      agentFiles[0].content = instructionsContent;
+      
+      console.log(chalk.yellow('📝 Generating knowledge base files...\n'));
+      
+      for (const file of agentFiles) {
+        if (!file.content) continue;
+        const result = await fsTools.writeFile(file.path, file.content);
+        if (result.success) {
+          console.log(chalk.green('  ✓'), chalk.dim(file.name.padEnd(15)), chalk.gray(file.path));
+        } else {
+          console.log(chalk.red('  ✗'), file.name, chalk.red(result.error));
+        }
+      }
+      
+      // Create decisions directory
+      const decisionsReadme = `# Architecture Decision Records
+
+Document important architectural decisions here using the ADR format.
+
+## Template
+
+Create new ADRs as: ADR-XXX-title.md
+
+Format:
+- Status: Proposed | Accepted | Deprecated
+- Context: What problem are we solving?
+- Decision: What did we decide?
+- Consequences: What are the implications?
+`;
+      
+      await fsTools.writeFile('.agent/decisions/README.md', decisionsReadme);
+      console.log(chalk.green('  ✓'), chalk.dim('Decisions       '), chalk.gray('.agent/decisions/'));
+      
+      console.log(chalk.green('\n✓ Knowledge base generated!\n'));
+      
+      if (discoveryResult.recommendations.length > 0) {
+        console.log(chalk.yellow('💡 Recommendations:\n'));
+        discoveryResult.recommendations.forEach((rec, i) => {
+          console.log(chalk.dim(`   ${i + 1}. ${rec}`));
+        });
+        console.log();
+      }
+      
+      console.log(chalk.cyan('📋 Next Steps:\n'));
+      console.log(chalk.dim('   1. Review files in .agent/ directory'));
+      console.log(chalk.dim('   2. Edit them to match your exact requirements'));
+      console.log(chalk.dim('   3. Add any missing information'));
+      console.log(chalk.dim('   4. Run your first task:\n'));
+      console.log(chalk.cyan(`      npm run dev task "Add health check endpoint" --repo "${repoPath}"`));
+      console.log();
+      
+    } catch (error) {
+      console.error(chalk.red('\nError during discovery:'), error);
+      process.exit(1);
+    }
   });
 
 program.parse();

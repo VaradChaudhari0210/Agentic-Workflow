@@ -30,26 +30,40 @@ ANTHROPIC_API_KEY=your_key_here
 TARGET_REPO_PATH=C:\path\to\your\backend\project
 ```
 
-## Step 3: Initialize Agent Knowledge
+## Step 3: Initialize Agent Knowledge (Auto-Discovery) 🆕
+
+The agent can **automatically analyze** your repository and generate documentation:
 
 ```bash
-npm run dev init C:\path\to\your\backend\project
+npm run dev discover C:\path\to\your\backend\project
 ```
 
-This creates `.agent/` directory in your project with architecture documentation.
+**What this does:**
+- 🔍 Scans your codebase (30-60 seconds)
+- 📊 Detects framework, database, patterns
+- 📝 Generates `.agent/` directory automatically
+- ✅ Creates architecture.md, conventions.md, api.md, etc.
 
-**Important**: Edit these files to match YOUR project:
+**Alternative (Manual Setup):**
+```bash
+npm run dev init C:\path\to\your\backend\project
+# Then manually edit each template file
+```
+
+**Recommended:** Use `discover` - it's much faster and more accurate!
+
+### Review Generated Files
 
 ```bash
 cd C:\path\to\your\backend\project\.agent
 
-# Edit each file:
-notepad architecture.md    # Your architecture
-notepad conventions.md     # Your conventions
-notepad database.md        # Your database
-notepad api.md            # Your API patterns
-notepad security.md       # Your security requirements
+# Review and edit if needed:
+notepad architecture.md    # Check detected architecture
+notepad conventions.md     # Check detected conventions
+notepad database.md        # Check database patterns
 ```
+
+The agent learns from these files, so review for accuracy!
 
 ## Step 4: First Task
 
