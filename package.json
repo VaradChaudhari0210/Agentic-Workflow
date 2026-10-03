@@ -1,25 +1,57 @@
 {
   "name": "backend-engineer-agent",
-  "version": "0.1.0",
-  "description": "Personal agentic workflow for backend engineering tasks",
+  "version": "1.0.0",
+  "description": "AI-powered backend engineering agent that autonomously implements features from requirements to tested code",
   "type": "module",
   "main": "dist/index.js",
+  "bin": {
+    "backend-agent": "dist/index.js",
+    "be-agent": "dist/index.js"
+  },
+  "files": [
+    "dist/**/*",
+    "README.md",
+    "LICENSE",
+    "QUICKSTART.md",
+    "EXAMPLES.md"
+  ],
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "scripts": {
     "build": "tsc",
     "dev": "tsx src/index.ts",
     "start": "node dist/index.js",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "prepublishOnly": "npm run build && npm test",
+    "prepare": "npm run build",
+    "postinstall": "node dist/postinstall.js || exit 0"
   },
   "keywords": [
     "agent",
     "backend",
     "coding-assistant",
-    "workflow"
+    "workflow",
+    "ai",
+    "automation",
+    "typescript",
+    "nodejs",
+    "anthropic",
+    "claude",
+    "devtools"
   ],
   "author": "",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/backend-engineer-agent"
+  },
+  "bugs": {
+    "url": "https://github.com/yourusername/backend-engineer-agent/issues"
+  },
+  "homepage": "https://github.com/yourusername/backend-engineer-agent#readme",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.32.1",
     "commander": "^12.1.0",

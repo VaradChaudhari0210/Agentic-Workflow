@@ -2,7 +2,7 @@
  * Git tools for version control operations
  */
 
-import simpleGit, { SimpleGit } from 'simple-git';
+import { simpleGit, SimpleGit } from 'simple-git';
 import { ToolResult } from '../types/index.js';
 
 export class GitTools {

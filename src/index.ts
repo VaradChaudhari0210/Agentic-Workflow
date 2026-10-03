@@ -1,3 +1,5 @@
+#!/usr/bin/env node
+
 /**
  * Backend Engineer Agent - Main entry point
  */
@@ -5,19 +7,82 @@
 import { config } from 'dotenv';
 import { Command } from 'commander';
 import { OrchestratorAgent } from './agents/orchestrator.js';
+import { DependencyMapperAgent } from './agents/dependency-mapper.js';
 import { AgentConfig } from './types/index.js';
 import chalk from 'chalk';
 import { readFile } from 'fs/promises';
 import { join } from 'path';
+import * as configManager from './config/manager.js';
+import readline from 'readline/promises';
 
 config();
 
 const program = new Command();
 
+/**
+ * Get API key with fallback to interactive prompt
+ */
+async function getApiKeyOrPrompt(allowPrompt: boolean = true): Promise<string | null> {
+  // Try to get from config manager (checks ENV and config file)
+  let apiKey = await configManager.getApiKey();
+  
+  if (apiKey) {
+    return apiKey;
+  }
+  
+  // If no API key found and prompting is allowed
+  if (allowPrompt && process.stdin.isTTY) {
+    console.log(chalk.yellow('\n⚠️  No API key found!\n'));
+    console.log(chalk.dim('Get your API key from: https://console.anthropic.com/\n'));
+    
+    const rl = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout
+    });
+    
+    try {
+      apiKey = await rl.question(chalk.cyan('Enter your Anthropic API key: '));
+      
+      if (apiKey && apiKey.trim()) {
+        apiKey = apiKey.trim();
+        
+        const saveChoice = await rl.question(chalk.cyan('Save this key for future use? (y/n): '));
+        
+        if (saveChoice.toLowerCase() === 'y') {
+          await configManager.setApiKey(apiKey);
+          console.log(chalk.green(`✓ API key saved to ${configManager.getConfigPath()}\n`));
+        }
+      }
+    } finally {
+      rl.close();
+    }
+  }
+  
+  return apiKey || null;
+}
+
+/**
+ * Show helpful error message when API key is missing
+ */
+function showApiKeyHelp(): void {
+  console.log(chalk.red('\n✗ Error: No API key configured\n'));
+  console.log(chalk.yellow('You need an Anthropic API key to use this tool.\n'));
+  console.log(chalk.dim('Get your API key:'));
+  console.log(chalk.cyan('  https://console.anthropic.com/\n'));
+  console.log(chalk.dim('Then set it using one of these methods:\n'));
+  console.log(chalk.cyan('  1. Save to config file:'));
+  console.log(chalk.dim('     backend-agent config --set-api-key sk-ant-...\n'));
+  console.log(chalk.cyan('  2. Use environment variable:'));
+  console.log(chalk.dim('     export ANTHROPIC_API_KEY=sk-ant-...'));
+  console.log(chalk.dim('     backend-agent task "..."\n'));
+  console.log(chalk.cyan('  3. Pass inline:'));
+  console.log(chalk.dim('     ANTHROPIC_API_KEY=sk-ant-... backend-agent task "..."\n'));
+}
+
 program
   .name('backend-agent')
-  .description('Personal agentic workflow for backend engineering tasks')
-  .version('0.1.0');
+  .description('AI-powered backend engineering agent')
+  .version('1.0.0');
 
 program
   .command('task')
@@ -30,10 +95,10 @@ program
   .option('--confirm-plan', 'Review and approve plan before implementation', false)
   .option('--no-summary', 'Skip generating task summary', false)
   .action(async (description: string, options) => {
-    const apiKey = process.env.ANTHROPIC_API_KEY;
+    const apiKey = await getApiKeyOrPrompt(true);
     
     if (!apiKey) {
-      console.error(chalk.red('Error: ANTHROPIC_API_KEY environment variable is required'));
+      showApiKeyHelp();
       process.exit(1);
     }
 
@@ -359,14 +424,79 @@ Example: ADR-001-authentication-strategy.md
   });
 
 program
+  .command('config')
+  .description('Manage configuration')
+  .option('--set-api-key <key>', 'Set Anthropic API key')
+  .option('--show', 'Show current configuration')
+  .option('--path', 'Show configuration file path')
+  .action(async (options) => {
+    // Set API key
+    if (options.setApiKey) {
+      try {
+        await configManager.setApiKey(options.setApiKey);
+        console.log(chalk.green('✓ API key saved successfully'));
+        console.log(chalk.dim(`  Location: ${configManager.getConfigPath()}`));
+      } catch (error) {
+        console.error(chalk.red('✗ Failed to save API key:'), error);
+        process.exit(1);
+      }
+      return;
+    }
+    
+    // Show config path
+    if (options.path) {
+      console.log(configManager.getConfigPath());
+      return;
+    }
+    
+    // Show current config
+    if (options.show) {
+      const config = await configManager.loadConfig();
+      const apiKey = await configManager.getApiKey();
+      
+      console.log(chalk.blue('\n📋 Current Configuration:\n'));
+      console.log(chalk.dim('Config file:'), configManager.getConfigPath());
+      console.log(chalk.dim('Exists:'), configManager.configExists() ? chalk.green('Yes') : chalk.yellow('No'));
+      console.log();
+      
+      if (apiKey) {
+        const source = process.env.ANTHROPIC_API_KEY ? 'environment variable' : 'config file';
+        console.log(chalk.dim('API Key:'), chalk.green('✓ Configured'), chalk.dim(`(from ${source})`));
+        console.log(chalk.dim('Key (masked):'), apiKey.substring(0, 10) + '...' + apiKey.substring(apiKey.length - 4));
+      } else {
+        console.log(chalk.dim('API Key:'), chalk.red('✗ Not configured'));
+      }
+      
+      if (config.defaultModel) {
+        console.log(chalk.dim('Default Model:'), config.defaultModel);
+      }
+      
+      if (config.defaultRepo) {
+        console.log(chalk.dim('Default Repo:'), config.defaultRepo);
+      }
+      
+      console.log();
+      return;
+    }
+    
+    // No options - show help
+    console.log(chalk.blue('\n📋 Configuration Management\n'));
+    console.log(chalk.dim('Usage:'));
+    console.log(chalk.cyan('  backend-agent config --set-api-key <key>'), chalk.dim('  # Save API key'));
+    console.log(chalk.cyan('  backend-agent config --show'), chalk.dim('                # Show current config'));
+    console.log(chalk.cyan('  backend-agent config --path'), chalk.dim('                # Show config file path'));
+    console.log();
+  });
+
+program
   .command('discover')
   .description('Auto-discover repository patterns and generate .agent/ knowledge base')
   .argument('[repo-path]', 'Path to target repository', '.')
   .action(async (repoPath: string) => {
-    const apiKey = process.env.ANTHROPIC_API_KEY;
+    const apiKey = await getApiKeyOrPrompt(true);
     
     if (!apiKey) {
-      console.error(chalk.red('Error: ANTHROPIC_API_KEY environment variable is required'));
+      showApiKeyHelp();
       process.exit(1);
     }
 
@@ -501,6 +631,64 @@ Format:
       
     } catch (error) {
       console.error(chalk.red('\nError during discovery:'), error);
+      process.exit(1);
+    }
+  });
+
+// Analyze command
+const analyzeCmd = program
+  .command('analyze')
+  .description('Analyze repository aspects');
+
+analyzeCmd
+  .command('deps')
+  .description('Analyze project dependencies')
+  .option('-r, --repo <path>', 'Path to target repo', '.')
+  .option('--outdated', 'Only show outdated packages')
+  .option('--vulnerabilities', 'Only show vulnerability info')
+  .option('--usage', 'Only show usage analysis')
+  .option('--full', 'Full analysis (all checks)')
+  .option('--suggest-updates', 'Include suggested update commands')
+  .action(async (options) => {
+    const repoPath = options.repo || '.';
+    
+    // Determine which analysis types to run
+    let checkOutdated = false;
+    let checkVulnerabilities = false;
+    let checkUsage = false;
+
+    if (options.full || (!options.outdated && !options.vulnerabilities && !options.usage)) {
+      // Default: full analysis
+      checkOutdated = true;
+      checkVulnerabilities = true;
+      checkUsage = true;
+    } else {
+      checkOutdated = options.outdated;
+      checkVulnerabilities = options.vulnerabilities;
+      checkUsage = options.usage;
+    }
+
+    const analysisOptions = {
+      repoPath,
+      checkOutdated,
+      checkVulnerabilities,
+      checkUsage
+    };
+
+    const formatOptions = {
+      outdatedOnly: options.outdated && !options.vulnerabilities && !options.usage,
+      vulnsOnly: options.vulnerabilities && !options.outdated && !options.usage,
+      usageOnly: options.usage && !options.outdated && !options.vulnerabilities,
+      suggestUpdates: options.suggestUpdates
+    };
+
+    try {
+      const agent = new DependencyMapperAgent(repoPath);
+      const report = await agent.generateReport(analysisOptions);
+      const formatted = agent.formatReport(report, formatOptions);
+      console.log(formatted);
+    } catch (error) {
+      console.error(chalk.red('Error analyzing dependencies:'), error);
       process.exit(1);
     }
   });
