@@ -7,6 +7,7 @@
 import { config } from 'dotenv';
 import { Command } from 'commander';
 import { OrchestratorAgent } from './agents/orchestrator.js';
+import { DependencyMapperAgent } from './agents/dependency-mapper.js';
 import { AgentConfig } from './types/index.js';
 import chalk from 'chalk';
 import { readFile } from 'fs/promises';
@@ -630,6 +631,64 @@ Format:
       
     } catch (error) {
       console.error(chalk.red('\nError during discovery:'), error);
+      process.exit(1);
+    }
+  });
+
+// Analyze command
+const analyzeCmd = program
+  .command('analyze')
+  .description('Analyze repository aspects');
+
+analyzeCmd
+  .command('deps')
+  .description('Analyze project dependencies')
+  .option('-r, --repo <path>', 'Path to target repo', '.')
+  .option('--outdated', 'Only show outdated packages')
+  .option('--vulnerabilities', 'Only show vulnerability info')
+  .option('--usage', 'Only show usage analysis')
+  .option('--full', 'Full analysis (all checks)')
+  .option('--suggest-updates', 'Include suggested update commands')
+  .action(async (options) => {
+    const repoPath = options.repo || '.';
+    
+    // Determine which analysis types to run
+    let checkOutdated = false;
+    let checkVulnerabilities = false;
+    let checkUsage = false;
+
+    if (options.full || (!options.outdated && !options.vulnerabilities && !options.usage)) {
+      // Default: full analysis
+      checkOutdated = true;
+      checkVulnerabilities = true;
+      checkUsage = true;
+    } else {
+      checkOutdated = options.outdated;
+      checkVulnerabilities = options.vulnerabilities;
+      checkUsage = options.usage;
+    }
+
+    const analysisOptions = {
+      repoPath,
+      checkOutdated,
+      checkVulnerabilities,
+      checkUsage
+    };
+
+    const formatOptions = {
+      outdatedOnly: options.outdated && !options.vulnerabilities && !options.usage,
+      vulnsOnly: options.vulnerabilities && !options.outdated && !options.usage,
+      usageOnly: options.usage && !options.outdated && !options.vulnerabilities,
+      suggestUpdates: options.suggestUpdates
+    };
+
+    try {
+      const agent = new DependencyMapperAgent(repoPath);
+      const report = await agent.generateReport(analysisOptions);
+      const formatted = agent.formatReport(report, formatOptions);
+      console.log(formatted);
+    } catch (error) {
+      console.error(chalk.red('Error analyzing dependencies:'), error);
       process.exit(1);
     }
   });
