@@ -160,6 +160,83 @@ Options:
 - `--max-attempts` - Maximum implementation attempts (default: 3)
 - `--approval` - Approval mode: manual, auto, or suggest-only (default: manual)
 
+## Commands
+
+### 1. Run Tasks (Main Feature)
+
+```bash
+npm run dev task "Add endpoint to return monthly statistics for a user"
+```
+
+Execute backend engineering tasks from requirements to implementation.
+
+### 2. Auto-Discovery
+
+```bash
+npm run dev discover /path/to/your/backend/project
+```
+
+Automatically analyze your repository and generate the `.agent/` knowledge base.
+
+### 3. Architecture Analysis (NEW)
+
+```bash
+npm run dev analyze arch [repo-path] [options]
+```
+
+Generate comprehensive architecture documentation for your project.
+
+**Options:**
+- `--output <file>` - Save documentation to a file (default: stdout)
+- `--format <format>` - Output format: `markdown` or `json` (default: markdown)
+
+**Examples:**
+
+```bash
+# Generate markdown documentation to console
+npm run dev analyze arch .
+
+# Save to file
+npm run dev analyze arch . --output ARCHITECTURE.md
+
+# Generate JSON report
+npm run dev analyze arch . --format json --output architecture.json
+
+# Analyze different project
+npm run dev analyze arch /path/to/other/project
+```
+
+**What it detects:**
+- 🏗️ Tech stack (language, runtime, framework, database, ORM)
+- 📁 Project structure (directories, entry points, patterns)
+- 📦 Dependencies (production and development)
+- 🚪 Entry points (main, CLI commands)
+- 🔨 Build scripts (with purposes)
+- 📝 Configuration files
+
+**Output includes:**
+- Overview and tech stack summary
+- Project structure tree with directory purposes
+- Key dependencies categorized by type
+- Entry points with descriptions
+- Build scripts with inferred purposes
+- Configuration files list
+
+### 4. Dependency Analysis
+
+```bash
+npm run dev analyze deps [options]
+```
+
+Analyze project dependencies for outdated packages, vulnerabilities, and usage patterns.
+
+**Options:**
+- `--outdated` - Only show outdated packages
+- `--vulnerabilities` - Only show vulnerability info
+- `--usage` - Only show usage analysis
+- `--full` - Full analysis (default)
+- `--suggest-updates` - Include update commands
+
 ## How It Works
 
 ### 1. Planner Agent

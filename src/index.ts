@@ -693,4 +693,55 @@ analyzeCmd
     }
   });
 
+analyzeCmd
+  .command('arch')
+  .description('Analyze project architecture and generate documentation')
+  .argument('[repo-path]', 'Path to target repository', '.')
+  .option('--output <file>', 'Output file for documentation (default: stdout)')
+  .option('--format <format>', 'Output format: markdown or json', 'markdown')
+  .action(async (repoPath: string, options) => {
+    console.log(chalk.blue('\n╔══════════════════════════════════════════════════════════╗'));
+    console.log(chalk.blue('║') + chalk.bold('  Architecture Analysis') + chalk.blue('                              ║'));
+    console.log(chalk.blue('╚══════════════════════════════════════════════════════════╝\n'));
+    console.log(chalk.cyan('Target:'), repoPath);
+    console.log(chalk.dim('─'.repeat(60)) + '\n');
+
+    try {
+      const { ArchitectureDocumenterAgent } = await import('./agents/architecture-documenter.js');
+      const documenter = new ArchitectureDocumenterAgent(repoPath);
+
+      if (options.format === 'json') {
+        // Generate JSON report
+        const report = await documenter.generateArchitectureReport();
+        const json = JSON.stringify(report, null, 2);
+
+        if (options.output) {
+          const { writeFile: writeFileImport } = await import('fs/promises');
+          await writeFileImport(options.output, json);
+          console.log(chalk.green('✓ Report saved to:'), chalk.dim(options.output));
+        } else {
+          console.log(json);
+        }
+      } else {
+        // Generate markdown documentation
+        const documentation = await documenter.generateDocumentation();
+
+        if (options.output) {
+          const { writeFile: writeFileImport } = await import('fs/promises');
+          await writeFileImport(options.output, documentation);
+          console.log(chalk.green('✓ Documentation saved to:'), chalk.dim(options.output));
+        } else {
+          console.log('\n' + chalk.dim('─'.repeat(60)));
+          console.log(documentation);
+          console.log(chalk.dim('─'.repeat(60)) + '\n');
+        }
+      }
+
+      console.log(chalk.green('\n✓ Analysis complete!\n'));
+    } catch (error) {
+      console.error(chalk.red('\nError during analysis:'), error);
+      process.exit(1);
+    }
+  });
+
 program.parse();
