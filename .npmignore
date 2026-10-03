@@ -1,0 +1,46 @@
+# Source files (only ship compiled dist/)
+src/
+*.ts
+!*.d.ts
+tsconfig.json
+
+# Tests
+**/__tests__/
+**/*.test.ts
+**/*.spec.ts
+vitest.config.ts
+coverage/
+
+# Development files
+.env
+.env.example
+.git/
+.github/
+.gitignore
+node_modules/
+
+# Documentation (keep essential, remove extras)
+ARCHITECTURE.md
+EXTENDING.md
+COMPARISON.md
+AUTO_DISCOVERY.md
+PLAN_CONFIRMATION.md
+PROJECT_SUMMARY.md
+START_HERE.md
+TASK_SUMMARIES.md
+INDEX.md
+IMPLEMENTATION_LOG.md
+GETTING_STARTED.md
+
+# Keep these docs
+!README.md
+!LICENSE
+!QUICKSTART.md
+!EXAMPLES.md
+
+# Build artifacts
+*.log
+npm-debug.log*
+.DS_Store
+.vscode/
+.idea/
