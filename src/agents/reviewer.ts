@@ -1,11 +1,18 @@
 /**
  * Reviewer Agent - Reviews implementation for quality, security, and correctness
+ * Enhanced with specialized security, performance, and coverage analysis
  */
 
 import Anthropic from '@anthropic-ai/sdk';
 import { ImplementationPlan, ImplementationResult, ReviewResult, ReviewIssue } from '../types/index.js';
 import { FilesystemTools } from '../tools/filesystem.js';
 import { GitTools } from '../tools/git.js';
+import { SecuritySpecialist } from '../analyzers/security-specialist.js';
+import { PerformanceAnalyzer } from '../analyzers/performance-analyzer.js';
+import { CoverageTracker } from '../analyzers/coverage-tracker.js';
+import { SecurityReport } from '../types/security.js';
+import { PerformanceReport } from '../types/performance.js';
+import { CoverageReport } from '../types/coverage.js';
 
 const REVIEWER_SYSTEM_PROMPT = `You are a Backend Code Reviewer Agent.
 
@@ -69,13 +76,21 @@ Return your review as JSON:
 }`;
 
 export class ReviewerAgent {
+  private repoPath: string;
+
   constructor(
     private client: Anthropic,
     private model: string,
     private fsTools: FilesystemTools,
-    private gitTools: GitTools
-  ) {}
+    private gitTools: GitTools,
+    repoPath?: string
+  ) {
+    this.repoPath = repoPath || process.cwd();
+  }
 
+  /**
+   * Standard review (existing functionality)
+   */
   async review(
     requirement: string,
     plan: ImplementationPlan,
@@ -132,6 +147,251 @@ Review this implementation against the checklist and return your assessment as J
     } catch (error) {
       throw new Error(`Failed to parse review: ${error}`);
     }
+  }
+
+  /**
+   * Enhanced review with specialized analysis
+   */
+  async enhancedReview(options: {
+    requirement: string;
+    plan: ImplementationPlan;
+    implementation: ImplementationResult;
+    includeSecurity?: boolean;
+    includePerformance?: boolean;
+    includeCoverage?: boolean;
+  }): Promise<{
+    basicReview: ReviewResult;
+    securityReport?: SecurityReport;
+    performanceReport?: PerformanceReport;
+    coverageReport?: CoverageReport;
+    combinedScore: number;
+    summary: string;
+  }> {
+    const {
+      requirement,
+      plan,
+      implementation,
+      includeSecurity = true,
+      includePerformance = true,
+      includeCoverage = true
+    } = options;
+
+    // Run basic review
+    const basicReview = await this.review(requirement, plan, implementation);
+
+    // Run specialized analyses in parallel
+    const [securityReport, performanceReport, coverageReport] = await Promise.all([
+      includeSecurity ? this.runSecurityAnalysis() : Promise.resolve(undefined),
+      includePerformance ? this.runPerformanceAnalysis() : Promise.resolve(undefined),
+      includeCoverage ? this.runCoverageAnalysis() : Promise.resolve(undefined)
+    ]);
+
+    // Calculate combined score
+    const combinedScore = this.calculateCombinedScore(
+      basicReview,
+      securityReport,
+      performanceReport,
+      coverageReport
+    );
+
+    // Generate summary
+    const summary = this.generateEnhancedSummary(
+      basicReview,
+      securityReport,
+      performanceReport,
+      coverageReport
+    );
+
+    return {
+      basicReview,
+      securityReport,
+      performanceReport,
+      coverageReport,
+      combinedScore,
+      summary
+    };
+  }
+
+  /**
+   * Security-focused review
+   */
+  async reviewSecurity(): Promise<SecurityReport> {
+    return await this.runSecurityAnalysis();
+  }
+
+  /**
+   * Performance-focused review
+   */
+  async reviewPerformance(): Promise<PerformanceReport> {
+    return await this.runPerformanceAnalysis();
+  }
+
+  /**
+   * Coverage-focused review
+   */
+  async reviewCoverage(): Promise<CoverageReport> {
+    return await this.runCoverageAnalysis();
+  }
+
+  /**
+   * Run security analysis
+   */
+  private async runSecurityAnalysis(): Promise<SecurityReport> {
+    const specialist = new SecuritySpecialist({
+      path: this.repoPath,
+      includeFixes: true,
+      minSeverity: 'low'
+    });
+
+    return await specialist.analyze();
+  }
+
+  /**
+   * Run performance analysis
+   */
+  private async runPerformanceAnalysis(): Promise<PerformanceReport> {
+    const analyzer = new PerformanceAnalyzer({
+      path: this.repoPath,
+      includeOptimizations: true,
+      minSeverity: 'low'
+    });
+
+    return await analyzer.analyze();
+  }
+
+  /**
+   * Run coverage analysis
+   */
+  private async runCoverageAnalysis(): Promise<CoverageReport> {
+    const tracker = new CoverageTracker({
+      path: this.repoPath,
+      includeSuggestions: true,
+      maxSuggestions: 20
+    });
+
+    return await tracker.analyze();
+  }
+
+  /**
+   * Calculate combined score from all analyses
+   */
+  private calculateCombinedScore(
+    basicReview: ReviewResult,
+    securityReport?: SecurityReport,
+    performanceReport?: PerformanceReport,
+    coverageReport?: CoverageReport
+  ): number {
+    let totalScore = 0;
+    let components = 0;
+
+    // Basic review score (0-100)
+    // Approved = 100, critical issues = -20 each, high = -10, medium = -5, low = -2
+    let basicScore = basicReview.approved ? 100 : 80;
+    for (const issue of basicReview.issues || []) {
+      switch (issue.severity) {
+        case 'critical': basicScore -= 20; break;
+        case 'high': basicScore -= 10; break;
+        case 'medium': basicScore -= 5; break;
+        case 'low': basicScore -= 2; break;
+      }
+    }
+    basicScore = Math.max(0, basicScore);
+    totalScore += basicScore;
+    components++;
+
+    // Security score
+    if (securityReport) {
+      totalScore += securityReport.score;
+      components++;
+    }
+
+    // Performance score
+    if (performanceReport) {
+      totalScore += performanceReport.score;
+      components++;
+    }
+
+    // Coverage score
+    if (coverageReport) {
+      totalScore += coverageReport.score;
+      components++;
+    }
+
+    return components > 0 ? Math.round(totalScore / components) : 0;
+  }
+
+  /**
+   * Generate enhanced summary combining all reports
+   */
+  private generateEnhancedSummary(
+    basicReview: ReviewResult,
+    securityReport?: SecurityReport,
+    performanceReport?: PerformanceReport,
+    coverageReport?: CoverageReport
+  ): string {
+    let summary = '📊 Enhanced Code Review Summary\n\n';
+
+    // Basic review
+    summary += `✅ Basic Review: ${basicReview.approved ? 'APPROVED' : 'NEEDS WORK'}\n`;
+    if (basicReview.issues && basicReview.issues.length > 0) {
+      summary += `   Issues: ${basicReview.issues.length} (`;
+      const critical = basicReview.issues.filter(i => i.severity === 'critical').length;
+      const high = basicReview.issues.filter(i => i.severity === 'high').length;
+      if (critical > 0) summary += `${critical} critical, `;
+      if (high > 0) summary += `${high} high, `;
+      summary += `${basicReview.issues.length - critical - high} other)\n`;
+    }
+    summary += '\n';
+
+    // Security
+    if (securityReport) {
+      const emoji = securityReport.score >= 80 ? '✅' : securityReport.score >= 60 ? '⚠️' : '🚨';
+      summary += `${emoji} Security: ${securityReport.score}/100\n`;
+      if (securityReport.summary.total > 0) {
+        summary += `   Issues: ${securityReport.summary.total} (`;
+        if (securityReport.summary.critical > 0) summary += `${securityReport.summary.critical} critical, `;
+        if (securityReport.summary.high > 0) summary += `${securityReport.summary.high} high, `;
+        summary += `${securityReport.summary.medium + securityReport.summary.low} other)\n`;
+      }
+      summary += '\n';
+    }
+
+    // Performance
+    if (performanceReport) {
+      const emoji = performanceReport.score >= 80 ? '✅' : performanceReport.score >= 60 ? '⚠️' : '🚨';
+      summary += `${emoji} Performance: ${performanceReport.score}/100\n`;
+      if (performanceReport.summary.total > 0) {
+        summary += `   Issues: ${performanceReport.summary.total} (`;
+        if (performanceReport.summary.critical > 0) summary += `${performanceReport.summary.critical} critical, `;
+        if (performanceReport.summary.high > 0) summary += `${performanceReport.summary.high} high, `;
+        summary += `${performanceReport.summary.medium + performanceReport.summary.low} other)\n`;
+      }
+      summary += '\n';
+    }
+
+    // Coverage
+    if (coverageReport) {
+      const emoji = coverageReport.score >= 80 ? '✅' : coverageReport.score >= 60 ? '⚠️' : '🚨';
+      summary += `${emoji} Coverage: ${coverageReport.score}%\n`;
+      if (coverageReport.summary.filesAnalyzed > 0) {
+        summary += `   Files: ${coverageReport.summary.filesAnalyzed} analyzed`;
+        if (coverageReport.summary.criticalUncoveredFiles > 0) {
+          summary += `, ${coverageReport.summary.criticalUncoveredFiles} critical uncovered`;
+        }
+        summary += '\n';
+        if (coverageReport.summary.totalSuggestions > 0) {
+          summary += `   Suggestions: ${coverageReport.summary.totalSuggestions} test improvements\n`;
+        }
+      }
+      summary += '\n';
+    }
+
+    // Overall
+    const combinedScore = this.calculateCombinedScore(basicReview, securityReport, performanceReport, coverageReport);
+    const overallEmoji = combinedScore >= 80 ? '🎉' : combinedScore >= 60 ? '⚠️' : '🚨';
+    summary += `${overallEmoji} Overall Score: ${combinedScore}/100\n`;
+
+    return summary;
   }
 
   private async gatherImplementedFiles(files: string[]): Promise<string> {

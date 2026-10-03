@@ -259,7 +259,7 @@ The implementer:
 - Runs tests automatically
 - Retries on failure (up to max attempts)
 
-### 3. Reviewer Agent
+### 3. Reviewer Agent (Enhanced)
 
 The reviewer checks:
 - ✓ Does it satisfy the requirement?
@@ -269,6 +269,69 @@ The reviewer checks:
 - ✓ Are database queries safe?
 - ✓ Are tests sufficient?
 - ✓ Are there performance issues?
+
+**NEW in Phase 2.4 - Specialized Analysis:**
+- 🔒 **Security Specialist**: Detects 20+ vulnerability types (SQL injection, XSS, weak secrets, etc.)
+- ⚡ **Performance Analyzer**: Identifies N+1 queries, memory leaks, inefficient algorithms
+- 🧪 **Coverage Tracker**: Analyzes test coverage and suggests missing tests
+
+## Enhanced Review Capabilities (Phase 2.4)
+
+### Security Analysis
+Comprehensive security scanning with OWASP coverage:
+```bash
+# Scan for vulnerabilities
+backend-agent analyze security .
+
+# Focus on high/critical issues
+backend-agent analyze security src/controllers --min-severity high
+```
+
+**Detects:**
+- SQL/NoSQL injection patterns
+- XSS vulnerabilities
+- Weak JWT secrets & missing expiration
+- Hardcoded credentials
+- Missing authentication/authorization
+- Insecure session configuration
+- Missing rate limiting & CORS issues
+- And 13+ more patterns...
+
+### Performance Analysis
+Identify bottlenecks and optimization opportunities:
+```bash
+# Analyze performance
+backend-agent analyze performance .
+
+# Save detailed report
+backend-agent analyze performance src/services --output perf-report.txt
+```
+
+**Detects:**
+- N+1 query problems
+- Missing pagination & indexes
+- Memory leaks (event listeners, large allocations)
+- Inefficient algorithms (O(n²) complexity)
+- Sequential awaits that should be parallel
+- Missing connection pooling
+- And 14+ more patterns...
+
+### Coverage Analysis
+Test coverage insights and suggestions:
+```bash
+# Analyze test coverage
+backend-agent analyze coverage
+
+# Set minimum threshold (exits with error if below)
+backend-agent analyze coverage --min-coverage 80
+```
+
+**Provides:**
+- Overall and per-file coverage metrics
+- Critical uncovered code identification
+- Prioritized test suggestions with scenarios
+- Example test code generation
+- Gap analysis (uncovered functions, branches, error paths)
 
 ## Safety Features
 
