@@ -15,6 +15,14 @@ import { readFile } from 'fs/promises';
 import { join } from 'path';
 import * as configManager from './config/manager.js';
 import readline from 'readline/promises';
+import {
+  ErrorHandler,
+  Validator,
+  ValidationError,
+  APIKeyError,
+  ConfigurationError,
+  AnalysisError
+} from './utils/errors.js';
 
 config();
 
@@ -30,13 +38,15 @@ type Severity = typeof VALID_SEVERITIES[number];
  * Validate and parse severity option
  */
 function parseSeverity(value: string): Severity {
-  const normalized = value.toLowerCase();
-  if (!VALID_SEVERITIES.includes(normalized as Severity)) {
-    console.error(chalk.red(`✗ Error: Invalid severity level "${value}"`));
-    console.log(chalk.dim('   Valid options: low, medium, high, critical\n'));
-    process.exit(2);
+  try {
+    return Validator.validateEnum(value.toLowerCase(), VALID_SEVERITIES, 'severity');
+  } catch (error) {
+    if (error instanceof ValidationError) {
+      console.error(error.toUserMessage());
+      process.exit(2);
+    }
+    throw error;
   }
-  return normalized as Severity;
 }
 
 /**
@@ -85,18 +95,9 @@ async function getApiKeyOrPrompt(allowPrompt: boolean = true): Promise<string | 
  * Show helpful error message when API key is missing
  */
 function showApiKeyHelp(): void {
-  console.log(chalk.red('\n✗ Error: No API key configured\n'));
-  console.log(chalk.yellow('You need an Anthropic API key to use this tool.\n'));
-  console.log(chalk.dim('Get your API key:'));
-  console.log(chalk.cyan('  https://console.anthropic.com/\n'));
-  console.log(chalk.dim('Then set it using one of these methods:\n'));
-  console.log(chalk.cyan('  1. Save to config file:'));
-  console.log(chalk.dim('     backend-agent config --set-api-key sk-ant-...\n'));
-  console.log(chalk.cyan('  2. Use environment variable:'));
-  console.log(chalk.dim('     export ANTHROPIC_API_KEY=sk-ant-...'));
-  console.log(chalk.dim('     backend-agent task "..."\n'));
-  console.log(chalk.cyan('  3. Pass inline:'));
-  console.log(chalk.dim('     ANTHROPIC_API_KEY=sk-ant-... backend-agent task "..."\n'));
+  const error = new APIKeyError();
+  console.error(error.toUserMessage());
+  process.exit(1);
 }
 
 program
