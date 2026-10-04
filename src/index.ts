@@ -9,6 +9,7 @@ import { Command } from 'commander';
 import { OrchestratorAgent } from './agents/orchestrator.js';
 import { DependencyMapperAgent } from './agents/dependency-mapper.js';
 import { AgentConfig } from './types/index.js';
+import { TaskExecution } from './types/observability.js';
 import chalk from 'chalk';
 import { readFile } from 'fs/promises';
 import { join } from 'path';
@@ -879,6 +880,280 @@ analyzeCmd
       }
     } catch (error) {
       console.error(chalk.red('\nError during coverage analysis:'), error);
+      process.exit(1);
+    }
+  });
+
+// Health check command
+program
+  .command('health')
+  .description('Check system health and component status')
+  .option('--json', 'Output in JSON format')
+  .option('--check-all', 'Run health checks for all registered components')
+  .action(async (options) => {
+    try {
+      const { HealthChecker } = await import('./observability/health-checker.js');
+      const { loadHealthCheckerConfig } = await import('./config/observability.js');
+      
+      const config = loadHealthCheckerConfig();
+      const healthChecker = new HealthChecker(config);
+      
+      if (options.checkAll) {
+        console.log(chalk.blue('\n🏥 Running health checks...\n'));
+        
+        // Register some basic checks
+        healthChecker.registerComponent('system', async () => {
+          return {
+            name: 'system',
+            status: 'up' as const,
+            message: 'System is operational',
+            lastCheck: new Date().toISOString()
+          };
+        });
+        
+        const status = await healthChecker.checkHealth();
+        
+        if (options.json) {
+          console.log(JSON.stringify(status, null, 2));
+        } else {
+          console.log(chalk.cyan('Overall Status:'), 
+            status.status === 'healthy' ? chalk.green('✓ Healthy') :
+            status.status === 'degraded' ? chalk.yellow('⚠ Degraded') :
+            chalk.red('✗ Unhealthy')
+          );
+          console.log(chalk.dim('Timestamp:'), new Date(status.timestamp).toLocaleString());
+          console.log();
+          
+          console.log(chalk.cyan('System Resources:'));
+          console.log(chalk.dim('  Memory:'), `${Math.round(status.resources.memory.percentage)}% used`);
+          console.log(chalk.dim('  CPU:'), `${Math.round(status.resources.cpu.usage * 100)}% used`);
+          console.log(chalk.dim('  Disk:'), `${Math.round(status.resources.disk.percentage)}% used`);
+          console.log(chalk.dim('  Uptime:'), `${Math.floor(status.uptime / 3600)}h ${Math.floor((status.uptime % 3600) / 60)}m`);
+          console.log();
+          
+          if (status.components && status.components.length > 0) {
+            console.log(chalk.cyan('Components:'));
+            for (const component of status.components) {
+              const icon = component.status === 'up' ? chalk.green('✓') :
+                          component.status === 'degraded' ? chalk.yellow('⚠') :
+                          chalk.red('✗');
+              console.log(`  ${icon} ${component.name}: ${component.status}`);
+              if (component.message) {
+                console.log(chalk.dim(`     ${component.message}`));
+              }
+            }
+            console.log();
+          }
+        }
+        
+        // Exit with error if unhealthy
+        if (status.status === 'unhealthy') {
+          process.exit(1);
+        }
+      } else {
+        // Simple system health check
+        const status = await healthChecker.checkHealth();
+        
+        if (options.json) {
+          console.log(JSON.stringify(status, null, 2));
+        } else {
+          console.log(chalk.blue('\n🏥 System Health\n'));
+          console.log(chalk.cyan('Status:'), 
+            status.status === 'healthy' ? chalk.green('✓ Healthy') :
+            status.status === 'degraded' ? chalk.yellow('⚠ Degraded') :
+            chalk.red('✗ Unhealthy')
+          );
+          console.log();
+          console.log(chalk.cyan('Memory:'));
+          console.log(chalk.dim('  Used:'), `${(status.resources.memory.used / 1024 / 1024 / 1024).toFixed(2)} GB`);
+          console.log(chalk.dim('  Total:'), `${(status.resources.memory.total / 1024 / 1024 / 1024).toFixed(2)} GB`);
+          console.log(chalk.dim('  Usage:'), `${Math.round(status.resources.memory.percentage)}%`);
+          console.log();
+          console.log(chalk.cyan('CPU:'));
+          console.log(chalk.dim('  Usage:'), `${Math.round(status.resources.cpu.usage * 100)}%`);
+          console.log();
+          console.log(chalk.cyan('Disk:'));
+          console.log(chalk.dim('  Used:'), `${(status.resources.disk.used / 1024 / 1024 / 1024).toFixed(2)} GB`);
+          console.log(chalk.dim('  Total:'), `${(status.resources.disk.total / 1024 / 1024 / 1024).toFixed(2)} GB`);
+          console.log(chalk.dim('  Usage:'), `${Math.round(status.resources.disk.percentage)}%`);
+          console.log();
+          console.log(chalk.cyan('Uptime:'));
+          console.log(chalk.dim('  Duration:'), `${Math.floor(status.uptime / 3600)}h ${Math.floor((status.uptime % 3600) / 60)}m`);
+          console.log();
+        }
+        
+        // Exit with error if unhealthy
+        if (status.status === 'unhealthy') {
+          process.exit(1);
+        }
+      }
+    } catch (error) {
+      console.error(chalk.red('\nError checking health:'), error);
+      process.exit(1);
+    }
+  });
+
+// Metrics command
+program
+  .command('metrics')
+  .description('View performance metrics and statistics')
+  .option('--format <format>', 'Output format: json or prometheus', 'json')
+  .option('--output <file>', 'Save metrics to file')
+  .action(async (options) => {
+    try {
+      const { MetricsCollector } = await import('./observability/metrics-collector.js');
+      const { loadMetricsCollectorConfig } = await import('./config/observability.js');
+      
+      const config = loadMetricsCollectorConfig();
+      const collector = new MetricsCollector(config);
+      
+      const showMetrics = async () => {
+        const metrics = await collector.getAllMetrics();
+        const taskStats = collector.getTaskStats();
+        const recentTasks = collector.getRecentTasks(5);
+        
+        if (options.format === 'json') {
+          const json = JSON.stringify({ ...metrics, stats: taskStats, recentTasks }, null, 2);
+          
+          if (options.output) {
+            const { writeFile } = await import('fs/promises');
+            await writeFile(options.output, json);
+            console.log(chalk.green('✓ Metrics saved to:'), chalk.dim(options.output));
+          } else {
+            console.log(json);
+          }
+        } else if (options.format === 'prometheus') {
+          const prometheus = await collector.exportMetrics('prometheus');
+          
+          if (options.output) {
+            const { writeFile } = await import('fs/promises');
+            await writeFile(options.output, prometheus);
+            console.log(chalk.green('✓ Metrics saved to:'), chalk.dim(options.output));
+          } else {
+            console.log(prometheus);
+          }
+        } else {
+          // Pretty console output
+          console.log(chalk.blue('\n📊 Performance Metrics\n'));
+          
+          console.log(chalk.cyan('Task Statistics:'));
+          console.log(chalk.dim('  Total:'), taskStats.total);
+          console.log(chalk.dim('  Successful:'), chalk.green(taskStats.successful));
+          console.log(chalk.dim('  Failed:'), taskStats.failed > 0 ? chalk.red(taskStats.failed) : taskStats.failed);
+          console.log(chalk.dim('  Success Rate:'), `${Math.round(taskStats.successRate * 100)}%`);
+          console.log(chalk.dim('  Avg Duration:'), `${Math.round(taskStats.avgDuration)}ms`);
+          console.log();
+          
+          if (recentTasks.length > 0) {
+            console.log(chalk.cyan('Recent Tasks:'));
+            recentTasks.forEach((task: TaskExecution) => {
+              const icon = task.success ? chalk.green('✓') : chalk.red('✗');
+              console.log(`  ${icon} ${task.taskId}: ${Math.round(task.duration || 0)}ms`);
+            });
+            console.log();
+          }
+          
+          console.log(chalk.cyan('System Metrics:'));
+          console.log(chalk.dim('  Memory Usage:'), `${Math.round(metrics.system.memoryUsage.percentage)}%`);
+          console.log(chalk.dim('  CPU Usage:'), 'N/A'); // CPU not in SystemMetrics
+          console.log();
+        }
+      };
+      
+      await showMetrics();
+    } catch (error) {
+      console.error(chalk.red('\nError retrieving metrics:'), error);
+      process.exit(1);
+    }
+  });
+
+// Logs command
+program
+  .command('logs')
+  .description('View and manage application logs')
+  .option('--level <level>', 'Filter by log level (debug|info|warn|error)', 'info')
+  .option('--json', 'Output in JSON format')
+  .action(async (options) => {
+    try {
+      const { Logger } = await import('./observability/logger.js');
+      const { loadLoggerConfig } = await import('./config/observability.js');
+      
+      const config = loadLoggerConfig();
+      const logger = new Logger(config);
+      
+      console.log(chalk.blue('\n📋 Application Logs\n'));
+      console.log(chalk.dim('Note: This command shows the log configuration.'));
+      console.log(chalk.dim('To view actual logs, check the log files in the logs directory.\n'));
+      
+      console.log(chalk.cyan('Configuration:'));
+      console.log(chalk.dim('  Level:'), config.level);
+      console.log(chalk.dim('  Format:'), config.format);
+      console.log(chalk.dim('  Destination:'), config.destination);
+      if (config.filePath) {
+        console.log(chalk.dim('  Log File:'), config.filePath);
+        console.log(chalk.dim('  Max File Size:'), `${(config.maxFileSize || 0) / 1024 / 1024} MB`);
+        console.log(chalk.dim('  Max Files:'), config.maxFiles);
+      }
+      console.log();
+      
+      // Show sample log entries
+      logger.info('Sample info log', { context: 'cli' });
+      logger.warn('Sample warning log', { context: 'cli' });
+      logger.error('Sample error log', { context: 'cli', error: new Error('Sample error') });
+      
+      console.log(chalk.cyan('Sample logs written to demonstrate logging functionality.\n'));
+    } catch (error) {
+      console.error(chalk.red('\nError accessing logs:'), error);
+      process.exit(1);
+    }
+  });
+
+// Dashboard command
+program
+  .command('dashboard')
+  .description('Display comprehensive observability dashboard')
+  .option('--output <file>', 'Save dashboard HTML to file')
+  .option('--open', 'Open dashboard in browser')
+  .action(async (options) => {
+    try {
+      const { MetricsCollector } = await import('./observability/metrics-collector.js');
+      const { loadMetricsCollectorConfig } = await import('./config/observability.js');
+      
+      const config = loadMetricsCollectorConfig();
+      const collector = new MetricsCollector(config);
+      
+      const dashboard = await collector.generateDashboard();
+      
+      if (options.output) {
+        const { writeFile } = await import('fs/promises');
+        await writeFile(options.output, dashboard);
+        console.log(chalk.green('✓ Dashboard saved to:'), chalk.dim(options.output));
+        
+        if (options.open) {
+          const { exec } = await import('child_process');
+          const openCmd = process.platform === 'win32' ? 'start' :
+                         process.platform === 'darwin' ? 'open' : 'xdg-open';
+          exec(`${openCmd} ${options.output}`);
+          console.log(chalk.blue('Opening dashboard in browser...'));
+        }
+      } else {
+        console.log(chalk.blue('\n📊 Observability Dashboard\n'));
+        console.log(chalk.dim('To view the full dashboard, save to a file and open in a browser:'));
+        console.log(chalk.cyan('  backend-agent dashboard --output dashboard.html --open\n'));
+        
+        // Show summary instead
+        const taskStats = collector.getTaskStats();
+        const metrics = await collector.getAllMetrics();
+        
+        console.log(chalk.cyan('Quick Summary:'));
+        console.log(chalk.dim('  Tasks:'), `${taskStats.successful}/${taskStats.total} successful (${Math.round(taskStats.successRate * 100)}%)`);
+        console.log(chalk.dim('  Avg Duration:'), `${Math.round(taskStats.avgDuration)}ms`);
+        console.log(chalk.dim('  Memory:'), `${Math.round(metrics.system.memoryUsage.percentage)}%`);
+        console.log(chalk.dim('  CPU:'), 'N/A');
+        console.log();
+      }
+    } catch (error) {
+      console.error(chalk.red('\nError generating dashboard:'), error);
       process.exit(1);
     }
   });
