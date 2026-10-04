@@ -1,5 +1,5 @@
 {
-  "name": "featureForge",
+  "name": "back-pilot",
   "version": "1.0.0",
   "description": "AI-powered backend engineering agent that autonomously implements features from requirements to tested code",
   "type": "module",
