@@ -19,6 +19,8 @@ import {
   SecurityRecommendation,
   SecurityIssueContext
 } from '../types/security.js';
+import { fileCache, analysisCache, AnalysisCache } from '../utils/cache.js';
+import { parallelMap } from '../utils/parallel.js';
 
 /**
  * Security patterns for detecting common vulnerabilities
@@ -116,10 +118,10 @@ const SECURITY_PATTERNS: SecurityPattern[] = [
   {
     id: 'missing-auth-check',
     type: 'auth',
-    severity: 'high',
+    severity: 'medium',
     pattern: /router\.(post|put|delete|patch)\([^)]*\)\s*(?!.*authenticate|.*auth|.*requireAuth)/gi,
     description: 'Route without authentication middleware',
-    message: 'Potentially unprotected route: No authentication middleware detected',
+    message: '[Medium Confidence] Potentially unprotected route: No authentication middleware detected. Review if this route requires auth.',
     remediation: 'Add authentication middleware to protect sensitive routes',
     owasp: 'A01:2021 - Broken Access Control'
   },
@@ -185,7 +187,7 @@ const SECURITY_PATTERNS: SecurityPattern[] = [
     severity: 'medium',
     pattern: /app\.use\([^)]*\)\s*(?!.*rateLimit|.*rateLimiter)/gi,
     description: 'No rate limiting detected',
-    message: 'Missing rate limiting: API endpoints should have rate limiting',
+    message: '[Medium Confidence] Missing rate limiting: Consider adding rate limiting to API endpoints. May have false positives.',
     remediation: 'Add rate limiting middleware: app.use(rateLimit({ windowMs: 15*60*1000, max: 100 }))',
     owasp: 'A04:2021 - Insecure Design'
   },
@@ -258,7 +260,16 @@ export class SecuritySpecialist {
       includeDependencies: true,
       includeFixes: true,
       minSeverity: 'low',
-      excludePatterns: ['node_modules/**', 'dist/**', 'build/**', '.git/**'],
+      excludePatterns: [
+        'node_modules/**',
+        'dist/**',
+        'build/**',
+        '.git/**',
+        '**/analyzers/**', // Exclude analyzer source files to prevent self-analysis
+        '**/security-specialist.ts', // Exclude this file specifically
+        '**/coverage-tracker.ts',
+        '**/performance-analyzer.ts'
+      ],
       ...options
     };
   }
@@ -271,14 +282,34 @@ export class SecuritySpecialist {
     this.issues = [];
     this.filesAnalyzed = 0;
 
+    // Check cache first
+    const cacheKey = AnalysisCache.createKey('security', {
+      path: this.options.path,
+      minSeverity: this.options.minSeverity,
+      excludePatterns: this.options.excludePatterns
+    });
+
+    const cached = analysisCache.get(cacheKey);
+    if (cached) {
+      return cached;
+    }
+
     // Get all files to analyze
     const files = await this.getFilesToAnalyze();
 
-    // Analyze each file
-    for (const file of files) {
-      await this.analyzeFile(file);
-      this.filesAnalyzed++;
-    }
+    // Analyze files in parallel (5 at a time to avoid overwhelming the system)
+    const fileIssues = await parallelMap(
+      files,
+      async (file) => {
+        const issues = await this.analyzeFile(file);
+        return issues;
+      },
+      5 // concurrency
+    );
+
+    // Flatten results
+    this.issues = fileIssues.flat();
+    this.filesAnalyzed = files.length;
 
     // Calculate score
     const score = this.calculateSecurityScore();
@@ -291,7 +322,7 @@ export class SecuritySpecialist {
 
     const durationMs = Date.now() - startTime;
 
-    return {
+    const report: SecurityReport = {
       summary,
       issues: this.issues,
       score,
@@ -300,6 +331,11 @@ export class SecuritySpecialist {
       filesAnalyzed: this.filesAnalyzed,
       durationMs
     };
+
+    // Cache the result
+    analysisCache.set(cacheKey, report);
+
+    return report;
   }
 
   /**
@@ -329,10 +365,16 @@ export class SecuritySpecialist {
   /**
    * Analyze a single file for security issues
    */
-  private async analyzeFile(filePath: string): Promise<void> {
+  private async analyzeFile(filePath: string): Promise<SecurityIssue[]> {
     try {
-      const content = await readFile(filePath, 'utf-8');
+      // Use cached file content
+      const content = await fileCache.getFileContent(
+        filePath,
+        () => readFile(filePath, 'utf-8')
+      );
+      
       const lines = content.split('\n');
+      const issues: SecurityIssue[] = [];
 
       // Filter patterns based on options
       const patterns = this.getApplicablePatterns();
@@ -354,13 +396,16 @@ export class SecuritySpecialist {
           
           // Check if severity meets minimum threshold
           if (this.meetsMinimumSeverity(issue.severity)) {
-            this.issues.push(issue);
+            issues.push(issue);
           }
         }
       }
+      
+      return issues;
     } catch (error) {
       // Skip files that can't be read
       console.warn(`Warning: Could not analyze ${filePath}`);
+      return [];
     }
   }
 
@@ -391,7 +436,8 @@ export class SecuritySpecialist {
     const matches = content.matchAll(pattern.pattern);
 
     for (const match of matches) {
-      if (!match.index) continue;
+      // Skip if match.index is undefined (shouldn't happen with matchAll, but be defensive)
+      if (match.index === undefined) continue;
 
       // Find line number
       const beforeMatch = content.substring(0, match.index);

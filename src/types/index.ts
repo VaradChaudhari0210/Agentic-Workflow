@@ -135,3 +135,6 @@ export interface TestScenario {
   steps: string[];
   expectedResult: string;
 }
+
+// Re-export observability types for convenience
+export * from './observability.js';

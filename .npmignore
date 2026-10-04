@@ -4,12 +4,19 @@ src/
 !*.d.ts
 tsconfig.json
 
-# Tests
+# Tests - exclude all test files
 **/__tests__/
 **/*.test.ts
 **/*.spec.ts
+**/*.test.js
+**/*.spec.js
+**/*.test.d.ts
+**/*.spec.d.ts
+**/*.test.js.map
+**/*.spec.js.map
 vitest.config.ts
 coverage/
+.nyc_output/
 
 # Development files
 .env
@@ -19,7 +26,17 @@ coverage/
 .gitignore
 node_modules/
 
-# Documentation (keep essential, remove extras)
+# Build files not needed in package
+*.tgz
+.dist/
+
+# Phase documentation (development only)
+PHASE_*.md
+*_PLAN.md
+*_PROGRESS.md
+*_SUMMARY.md
+
+# Development documentation (keep user-facing only)
 ARCHITECTURE.md
 EXTENDING.md
 COMPARISON.md
@@ -31,8 +48,17 @@ TASK_SUMMARIES.md
 INDEX.md
 IMPLEMENTATION_LOG.md
 GETTING_STARTED.md
+CODE_PATTERNS.md
+TROUBLESHOOTING.md
+FAQ.md
+QUICK_REFERENCE.md
+ERROR_HANDLING_GUIDE.md
+COMPLETE_SETUP_GUIDE.md
+BEFORE_PUBLISHING.md
+READY_FOR_NPM.md
+PROJECT_STATUS.md
 
-# Keep these docs
+# Keep only essential docs for users
 !README.md
 !LICENSE
 !QUICKSTART.md
@@ -44,3 +70,6 @@ npm-debug.log*
 .DS_Store
 .vscode/
 .idea/
+
+# Scripts
+scripts/
