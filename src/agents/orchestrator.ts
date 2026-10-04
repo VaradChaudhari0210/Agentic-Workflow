@@ -14,6 +14,14 @@ import { GitTools } from '../tools/git.js';
 import { ShellTools } from '../tools/shell.js';
 import chalk from 'chalk';
 import { createInterface } from 'readline';
+import {
+  createObservabilityStack,
+  withObservability,
+  trackOperation,
+  logAgentAction,
+  shutdownObservability,
+  type ObservabilityStack
+} from '../observability/agent-wrapper.js';
 
 export class OrchestratorAgent {
   private client: Anthropic;
@@ -25,6 +33,7 @@ export class OrchestratorAgent {
   private fsTools: FilesystemTools;
   private gitTools: GitTools;
   private shellTools: ShellTools;
+  private obs: ObservabilityStack | null = null;
 
   constructor(private config: AgentConfig) {
     this.client = new Anthropic({ apiKey: config.apiKey });
@@ -40,6 +49,11 @@ export class OrchestratorAgent {
   }
 
   async executeTask(description: string): Promise<Task> {
+    // Initialize observability if not already done
+    if (!this.obs) {
+      this.obs = await createObservabilityStack();
+    }
+
     const task: Task = {
       id: this.generateTaskId(),
       description,
@@ -47,17 +61,27 @@ export class OrchestratorAgent {
       status: 'pending'
     };
 
-    console.log(chalk.blue('\n╔══════════════════════════════════════════════════════════╗'));
-    console.log(chalk.blue('║') + chalk.bold('  Backend Engineer Agent - Task Execution') + chalk.blue('               ║'));
-    console.log(chalk.blue('╚══════════════════════════════════════════════════════════╝\n'));
-    console.log(chalk.cyan('Task:'), description);
-    console.log(chalk.dim('─'.repeat(60)) + '\n');
+    return withObservability(this.obs, task.id, description, async () => {
+      logAgentAction(this.obs!, 'Orchestrator', 'Task execution started', {
+        taskId: task.id,
+        description
+      });
 
-    try {
-      // Check if .agent/ exists, if not, run discovery
-      const agentDirExists = await this.fsTools.fileExists('.agent/instructions.md');
-      
-      if (!agentDirExists) {
+      console.log(chalk.blue('\n╔══════════════════════════════════════════════════════════╗'));
+      console.log(chalk.blue('║') + chalk.bold('  Backend Engineer Agent - Task Execution') + chalk.blue('               ║'));
+      console.log(chalk.blue('╚══════════════════════════════════════════════════════════╝\n'));
+      console.log(chalk.cyan('Task:'), description);
+      console.log(chalk.dim('─'.repeat(60)) + '\n');
+
+      try {
+        // Check if .agent/ exists, if not, run discovery
+        const agentDirExists = await trackOperation(
+          this.obs!,
+          'check_agent_dir',
+          () => this.fsTools.fileExists('.agent/instructions.md')
+        );
+        
+        if (!agentDirExists) {
         console.log(chalk.yellow('📡 .agent/ directory not found. Running auto-discovery...\n'));
         
         const shouldDiscover = await this.promptUserForDiscovery();
@@ -74,7 +98,21 @@ export class OrchestratorAgent {
       task.status = 'understanding';
       console.log(chalk.yellow('📋 Phase 1: Understanding & Planning'));
       
-      const plan = await this.planner.createPlan(description);
+      logAgentAction(this.obs!, 'Planner', 'Creating plan', { taskId: task.id });
+      
+      const plan = await trackOperation(
+        this.obs!,
+        'create_plan',
+        () => this.planner.createPlan(description),
+        { taskId: task.id }
+      );
+      
+      logAgentAction(this.obs!, 'Planner', 'Plan created', {
+        taskId: task.id,
+        steps: plan.steps.length,
+        affectedFiles: plan.affectedFiles.length,
+        complexity: plan.estimatedComplexity
+      });
       
       console.log(chalk.green('✓ Plan created'));
       console.log(chalk.dim(`  • ${plan.steps.length} steps`));
@@ -119,7 +157,12 @@ export class OrchestratorAgent {
           console.log(chalk.yellow(`\n  Attempt ${attempts}/${this.config.maxAttempts}`));
         }
         
-        implementationResult = await this.implementer.implement(plan, task.description);
+        implementationResult = await trackOperation(
+          this.obs!,
+          'implement',
+          () => this.implementer.implement(plan, task.description),
+          { taskId: task.id, attempt: attempts }
+        );
         
         if (implementationResult.success && implementationResult.testsPassed) {
           console.log(chalk.green('✓ Implementation successful'));
@@ -154,11 +197,21 @@ export class OrchestratorAgent {
       task.status = 'reviewing';
       console.log(chalk.yellow('👁️  Phase 3: Code Review'));
       
-      const review = await this.reviewer.review(
-        task.description,
-        plan,
-        implementationResult
+      logAgentAction(this.obs!, 'Reviewer', 'Starting code review', { taskId: task.id });
+      
+      const review = await trackOperation(
+        this.obs!,
+        'review',
+        () => this.reviewer.review(task.description, plan, implementationResult!),
+        { taskId: task.id }
       );
+      
+      logAgentAction(this.obs!, 'Reviewer', 'Review completed', {
+        taskId: task.id,
+        approved: review.approved,
+        issuesCount: review.issues.length,
+        suggestionsCount: review.suggestions.length
+      });
       
       if (review.approved) {
         console.log(chalk.green('✓ Review passed'));
@@ -186,22 +239,40 @@ export class OrchestratorAgent {
 
       task.status = 'completed';
       
+      logAgentAction(this.obs!, 'Orchestrator', 'Task completed successfully', {
+        taskId: task.id,
+        branch: branchName
+      });
+      
       console.log(chalk.green('\n✓ Task completed successfully'));
       console.log(chalk.dim(`Branch: ${branchName}`));
       console.log(chalk.dim('Review the changes and merge when ready.\n'));
 
       // Generate task summary if enabled
       if (this.config.generateSummary !== false) { // Default true
-        await this.generateTaskSummary(task.description, plan, implementationResult, branchName);
+        await trackOperation(
+          this.obs!,
+          'generate_summary',
+          () => this.generateTaskSummary(task.description, plan, implementationResult!, branchName),
+          { taskId: task.id }
+        );
       }
+
+      return task;
 
     } catch (error) {
       task.status = 'failed';
       task.error = error instanceof Error ? error.message : String(error);
+      
+      logAgentAction(this.obs!, 'Orchestrator', 'Task failed', {
+        taskId: task.id,
+        error: task.error
+      });
+      
       console.log(chalk.red('\n✗ Task failed:'), task.error + '\n');
+      throw error; // Re-throw so withObservability can track it
     }
-
-    return task;
+    });
   }
 
   private generateTaskId(): string {
@@ -522,5 +593,25 @@ We will use ADRs to document important architectural decisions.
     for (const file of minimalFiles) {
       await this.fsTools.writeFile(file.path, file.content);
     }
+  }
+
+  /**
+   * Cleanup observability stack gracefully
+   */
+  async cleanup(): Promise<void> {
+    if (this.obs) {
+      await shutdownObservability(this.obs);
+      this.obs = null;
+    }
+  }
+
+  /**
+   * Get observability metrics for inspection
+   */
+  async getMetrics() {
+    if (!this.obs) {
+      return null;
+    }
+    return this.obs.metrics.getAllMetrics();
   }
 }
