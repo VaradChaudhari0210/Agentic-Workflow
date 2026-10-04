@@ -7,7 +7,7 @@
 
 import { Logger } from '../observability/logger.js';
 
-const logger = new Logger({ component: 'ErrorHandler' });
+const logger = new Logger({ level: 'info' });
 
 /**
  * Base error class with enhanced information
@@ -405,7 +405,7 @@ export class Validator {
       throw new ValidationError(
         fieldName,
         value,
-        allowedValues as string[]
+        [...allowedValues] // Convert readonly array to mutable array
       );
     }
     return value as T;
