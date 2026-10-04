@@ -367,8 +367,10 @@ export async function shutdownObservability(obs: ObservabilityStack): Promise<vo
     context: 'observability'
   });
 
-  // Stop any background timers
+  // Stop all background timers and intervals
   obs.healthChecker.stop();
+  obs.performance.stop();
+  obs.metrics.stopAggregation();
 
   obs.logger.info('Observability stack shutdown complete', {
     context: 'observability'

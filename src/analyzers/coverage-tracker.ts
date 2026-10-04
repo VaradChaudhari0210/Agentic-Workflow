@@ -56,6 +56,9 @@ export class CoverageTracker {
       return this.generateEmptyReport();
     }
 
+    // Clear any previous parse state
+    this.parsedCoverage.clear();
+
     // Parse coverage for each file
     this.parseCoverage(coverageData);
 
@@ -179,12 +182,11 @@ export class CoverageTracker {
       }
 
       // Parse branches
-      parsed.totalBranches = Object.keys(fileData.b).length;
-      for (const hits of Object.values(fileData.b)) {
-        if (hits.some(h => h > 0)) {
-          parsed.coveredBranches++;
-        }
-      }
+      // Istanbul stores multiple branch locations under each branch-map key
+      // Count each location individually for accurate coverage
+      const branchHits = Object.values(fileData.b).flat();
+      parsed.totalBranches = branchHits.length;
+      parsed.coveredBranches = branchHits.filter(hits => hits > 0).length;
 
       // Calculate total lines
       const allLines = new Set([...parsed.coveredLines, ...parsed.uncoveredLines]);
@@ -276,7 +278,7 @@ export class CoverageTracker {
    * Calculate percentage safely
    */
   private calculatePercentage(covered: number, total: number): number {
-    if (total === 0) return 100;
+    if (total === 0) return 0; // Don't inflate score with missing metrics
     return Math.round((covered / total) * 100);
   }
 

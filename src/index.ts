@@ -21,6 +21,25 @@ config();
 const program = new Command();
 
 /**
+ * Valid severity levels
+ */
+const VALID_SEVERITIES = ['low', 'medium', 'high', 'critical'] as const;
+type Severity = typeof VALID_SEVERITIES[number];
+
+/**
+ * Validate and parse severity option
+ */
+function parseSeverity(value: string): Severity {
+  const normalized = value.toLowerCase();
+  if (!VALID_SEVERITIES.includes(normalized as Severity)) {
+    console.error(chalk.red(`✗ Error: Invalid severity level "${value}"`));
+    console.log(chalk.dim('   Valid options: low, medium, high, critical\n'));
+    process.exit(2);
+  }
+  return normalized as Severity;
+}
+
+/**
  * Get API key with fallback to interactive prompt
  */
 async function getApiKeyOrPrompt(allowPrompt: boolean = true): Promise<string | null> {
@@ -701,6 +720,14 @@ analyzeCmd
   .option('--output <file>', 'Output file for documentation (default: stdout)')
   .option('--format <format>', 'Output format: markdown or json', 'markdown')
   .action(async (repoPath: string, options) => {
+    // Validate format option
+    const format = String(options.format).toLowerCase();
+    if (format !== 'markdown' && format !== 'json') {
+      console.error(chalk.red('✗ Error: Format must be either "markdown" or "json"'));
+      console.log(chalk.dim('   Use: --format markdown  or  --format json\n'));
+      process.exit(2);
+    }
+
     console.log(chalk.blue('\n╔══════════════════════════════════════════════════════════╗'));
     console.log(chalk.blue('║') + chalk.bold('  Architecture Analysis') + chalk.blue('                              ║'));
     console.log(chalk.blue('╚══════════════════════════════════════════════════════════╝\n'));
@@ -711,7 +738,7 @@ analyzeCmd
       const { ArchitectureDocumenterAgent } = await import('./agents/architecture-documenter.js');
       const documenter = new ArchitectureDocumenterAgent(repoPath);
 
-      if (options.format === 'json') {
+      if (format === 'json') {
         // Generate JSON report
         const report = await documenter.generateArchitectureReport();
         const json = JSON.stringify(report, null, 2);
@@ -753,18 +780,21 @@ analyzeCmd
   .option('--min-severity <level>', 'Minimum severity to report (low|medium|high|critical)', 'low')
   .option('--output <file>', 'Save report to file')
   .action(async (path: string, options) => {
+    // Validate severity
+    const minSeverity = parseSeverity(options.minSeverity);
+
     console.log(chalk.blue('\n╔══════════════════════════════════════════════════════════╗'));
     console.log(chalk.blue('║') + chalk.bold('  Security Analysis') + chalk.blue('                                  ║'));
     console.log(chalk.blue('╚══════════════════════════════════════════════════════════╝\n'));
     console.log(chalk.cyan('Target:'), path);
-    console.log(chalk.cyan('Min Severity:'), options.minSeverity);
+    console.log(chalk.cyan('Min Severity:'), minSeverity);
     console.log(chalk.dim('─'.repeat(60)) + '\n');
 
     try {
       const { SecuritySpecialist } = await import('./analyzers/security-specialist.js');
       const specialist = new SecuritySpecialist({
         path,
-        minSeverity: options.minSeverity,
+        minSeverity: minSeverity,
         includeFixes: true
       });
 
@@ -797,18 +827,21 @@ analyzeCmd
   .option('--min-severity <level>', 'Minimum severity to report (low|medium|high|critical)', 'low')
   .option('--output <file>', 'Save report to file')
   .action(async (path: string, options) => {
+    // Validate severity
+    const minSeverity = parseSeverity(options.minSeverity);
+
     console.log(chalk.blue('\n╔══════════════════════════════════════════════════════════╗'));
     console.log(chalk.blue('║') + chalk.bold('  Performance Analysis') + chalk.blue('                              ║'));
     console.log(chalk.blue('╚══════════════════════════════════════════════════════════╝\n'));
     console.log(chalk.cyan('Target:'), path);
-    console.log(chalk.cyan('Min Severity:'), options.minSeverity);
+    console.log(chalk.cyan('Min Severity:'), minSeverity);
     console.log(chalk.dim('─'.repeat(60)) + '\n');
 
     try {
       const { PerformanceAnalyzer } = await import('./analyzers/performance-analyzer.js');
       const analyzer = new PerformanceAnalyzer({
         path,
-        minSeverity: options.minSeverity,
+        minSeverity: minSeverity,
         includeOptimizations: true
       });
 
