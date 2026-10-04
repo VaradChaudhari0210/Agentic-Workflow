@@ -20,6 +20,8 @@ import {
   PerformanceIssueContext,
   PerformanceImpact
 } from '../types/performance.js';
+import { fileCache, analysisCache, AnalysisCache } from '../utils/cache.js';
+import { parallelMap } from '../utils/parallel.js';
 
 /**
  * Performance patterns for detecting common bottlenecks
@@ -326,14 +328,37 @@ export class PerformanceAnalyzer {
     this.issues = [];
     this.filesAnalyzed = 0;
 
+    // Check cache first
+    const cacheKey = AnalysisCache.createKey('performance', {
+      path: this.options.path,
+      minSeverity: this.options.minSeverity,
+      checkDatabase: this.options.checkDatabase,
+      checkAPI: this.options.checkAPI,
+      checkMemory: this.options.checkMemory,
+      excludePatterns: this.options.excludePatterns
+    });
+
+    const cached = analysisCache.get(cacheKey);
+    if (cached) {
+      return cached;
+    }
+
     // Get all files to analyze
     const files = await this.getFilesToAnalyze();
 
-    // Analyze each file
-    for (const file of files) {
-      await this.analyzeFile(file);
-      this.filesAnalyzed++;
-    }
+    // Analyze files in parallel (5 at a time)
+    const fileIssues = await parallelMap(
+      files,
+      async (file) => {
+        const issues = await this.analyzeFile(file);
+        return issues;
+      },
+      5 // concurrency
+    );
+
+    // Flatten results
+    this.issues = fileIssues.flat();
+    this.filesAnalyzed = files.length;
 
     // Calculate score
     const score = this.calculatePerformanceScore();
@@ -346,7 +371,7 @@ export class PerformanceAnalyzer {
 
     const durationMs = Date.now() - startTime;
 
-    return {
+    const report: PerformanceReport = {
       summary,
       issues: this.issues,
       score,
@@ -355,6 +380,11 @@ export class PerformanceAnalyzer {
       filesAnalyzed: this.filesAnalyzed,
       durationMs
     };
+
+    // Cache the result
+    analysisCache.set(cacheKey, report);
+
+    return report;
   }
 
   /**
@@ -384,10 +414,16 @@ export class PerformanceAnalyzer {
   /**
    * Analyze a single file for performance issues
    */
-  private async analyzeFile(filePath: string): Promise<void> {
+  private async analyzeFile(filePath: string): Promise<PerformanceIssue[]> {
     try {
-      const content = await readFile(filePath, 'utf-8');
+      // Use cached file content
+      const content = await fileCache.getFileContent(
+        filePath,
+        () => readFile(filePath, 'utf-8')
+      );
+      
       const lines = content.split('\n');
+      const issues: PerformanceIssue[] = [];
 
       // Filter patterns based on options
       const patterns = this.getApplicablePatterns();
@@ -409,13 +445,16 @@ export class PerformanceAnalyzer {
           
           // Check if severity meets minimum threshold
           if (this.meetsMinimumSeverity(issue.severity)) {
-            this.issues.push(issue);
+            issues.push(issue);
           }
         }
       }
+      
+      return issues;
     } catch (error) {
       // Skip files that can't be read
       console.warn(`Warning: Could not analyze ${filePath}`);
+      return [];
     }
   }
 
