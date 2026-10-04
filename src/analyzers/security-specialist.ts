@@ -116,10 +116,10 @@ const SECURITY_PATTERNS: SecurityPattern[] = [
   {
     id: 'missing-auth-check',
     type: 'auth',
-    severity: 'high',
+    severity: 'medium',
     pattern: /router\.(post|put|delete|patch)\([^)]*\)\s*(?!.*authenticate|.*auth|.*requireAuth)/gi,
     description: 'Route without authentication middleware',
-    message: 'Potentially unprotected route: No authentication middleware detected',
+    message: '[Medium Confidence] Potentially unprotected route: No authentication middleware detected. Review if this route requires auth.',
     remediation: 'Add authentication middleware to protect sensitive routes',
     owasp: 'A01:2021 - Broken Access Control'
   },
@@ -185,7 +185,7 @@ const SECURITY_PATTERNS: SecurityPattern[] = [
     severity: 'medium',
     pattern: /app\.use\([^)]*\)\s*(?!.*rateLimit|.*rateLimiter)/gi,
     description: 'No rate limiting detected',
-    message: 'Missing rate limiting: API endpoints should have rate limiting',
+    message: '[Medium Confidence] Missing rate limiting: Consider adding rate limiting to API endpoints. May have false positives.',
     remediation: 'Add rate limiting middleware: app.use(rateLimit({ windowMs: 15*60*1000, max: 100 }))',
     owasp: 'A04:2021 - Insecure Design'
   },
@@ -258,7 +258,16 @@ export class SecuritySpecialist {
       includeDependencies: true,
       includeFixes: true,
       minSeverity: 'low',
-      excludePatterns: ['node_modules/**', 'dist/**', 'build/**', '.git/**'],
+      excludePatterns: [
+        'node_modules/**',
+        'dist/**',
+        'build/**',
+        '.git/**',
+        '**/analyzers/**', // Exclude analyzer source files to prevent self-analysis
+        '**/security-specialist.ts', // Exclude this file specifically
+        '**/coverage-tracker.ts',
+        '**/performance-analyzer.ts'
+      ],
       ...options
     };
   }
@@ -391,7 +400,8 @@ export class SecuritySpecialist {
     const matches = content.matchAll(pattern.pattern);
 
     for (const match of matches) {
-      if (!match.index) continue;
+      // Skip if match.index is undefined (shouldn't happen with matchAll, but be defensive)
+      if (match.index === undefined) continue;
 
       // Find line number
       const beforeMatch = content.substring(0, match.index);

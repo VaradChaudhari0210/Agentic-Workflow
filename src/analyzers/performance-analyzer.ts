@@ -302,7 +302,18 @@ export class PerformanceAnalyzer {
       checkDatabase: true,
       checkAPI: true,
       checkMemory: true,
-      excludePatterns: ['node_modules/**', 'dist/**', 'build/**', '.git/**', '**/*.test.ts', '**/*.spec.ts'],
+      excludePatterns: [
+        'node_modules/**',
+        'dist/**',
+        'build/**',
+        '.git/**',
+        '**/*.test.ts',
+        '**/*.spec.ts',
+        '**/analyzers/**', // Exclude analyzer source files to prevent self-analysis
+        '**/security-specialist.ts',
+        '**/coverage-tracker.ts',
+        '**/performance-analyzer.ts'
+      ],
       ...options
     };
   }
@@ -446,7 +457,8 @@ export class PerformanceAnalyzer {
     const matches = content.matchAll(pattern.pattern);
 
     for (const match of matches) {
-      if (!match.index) continue;
+      // Skip if match.index is undefined (shouldn't happen with matchAll, but be defensive)
+      if (match.index === undefined) continue;
 
       // Find line number
       const beforeMatch = content.substring(0, match.index);
