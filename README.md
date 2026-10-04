@@ -160,6 +160,83 @@ Options:
 - `--max-attempts` - Maximum implementation attempts (default: 3)
 - `--approval` - Approval mode: manual, auto, or suggest-only (default: manual)
 
+## Commands
+
+### 1. Run Tasks (Main Feature)
+
+```bash
+npm run dev task "Add endpoint to return monthly statistics for a user"
+```
+
+Execute backend engineering tasks from requirements to implementation.
+
+### 2. Auto-Discovery
+
+```bash
+npm run dev discover /path/to/your/backend/project
+```
+
+Automatically analyze your repository and generate the `.agent/` knowledge base.
+
+### 3. Architecture Analysis (NEW)
+
+```bash
+npm run dev analyze arch [repo-path] [options]
+```
+
+Generate comprehensive architecture documentation for your project.
+
+**Options:**
+- `--output <file>` - Save documentation to a file (default: stdout)
+- `--format <format>` - Output format: `markdown` or `json` (default: markdown)
+
+**Examples:**
+
+```bash
+# Generate markdown documentation to console
+npm run dev analyze arch .
+
+# Save to file
+npm run dev analyze arch . --output ARCHITECTURE.md
+
+# Generate JSON report
+npm run dev analyze arch . --format json --output architecture.json
+
+# Analyze different project
+npm run dev analyze arch /path/to/other/project
+```
+
+**What it detects:**
+- 🏗️ Tech stack (language, runtime, framework, database, ORM)
+- 📁 Project structure (directories, entry points, patterns)
+- 📦 Dependencies (production and development)
+- 🚪 Entry points (main, CLI commands)
+- 🔨 Build scripts (with purposes)
+- 📝 Configuration files
+
+**Output includes:**
+- Overview and tech stack summary
+- Project structure tree with directory purposes
+- Key dependencies categorized by type
+- Entry points with descriptions
+- Build scripts with inferred purposes
+- Configuration files list
+
+### 4. Dependency Analysis
+
+```bash
+npm run dev analyze deps [options]
+```
+
+Analyze project dependencies for outdated packages, vulnerabilities, and usage patterns.
+
+**Options:**
+- `--outdated` - Only show outdated packages
+- `--vulnerabilities` - Only show vulnerability info
+- `--usage` - Only show usage analysis
+- `--full` - Full analysis (default)
+- `--suggest-updates` - Include update commands
+
 ## How It Works
 
 ### 1. Planner Agent
@@ -182,7 +259,7 @@ The implementer:
 - Runs tests automatically
 - Retries on failure (up to max attempts)
 
-### 3. Reviewer Agent
+### 3. Reviewer Agent (Enhanced)
 
 The reviewer checks:
 - ✓ Does it satisfy the requirement?
@@ -192,6 +269,69 @@ The reviewer checks:
 - ✓ Are database queries safe?
 - ✓ Are tests sufficient?
 - ✓ Are there performance issues?
+
+**NEW in Phase 2.4 - Specialized Analysis:**
+- 🔒 **Security Specialist**: Detects 20+ vulnerability types (SQL injection, XSS, weak secrets, etc.)
+- ⚡ **Performance Analyzer**: Identifies N+1 queries, memory leaks, inefficient algorithms
+- 🧪 **Coverage Tracker**: Analyzes test coverage and suggests missing tests
+
+## Enhanced Review Capabilities (Phase 2.4)
+
+### Security Analysis
+Comprehensive security scanning with OWASP coverage:
+```bash
+# Scan for vulnerabilities
+backend-agent analyze security .
+
+# Focus on high/critical issues
+backend-agent analyze security src/controllers --min-severity high
+```
+
+**Detects:**
+- SQL/NoSQL injection patterns
+- XSS vulnerabilities
+- Weak JWT secrets & missing expiration
+- Hardcoded credentials
+- Missing authentication/authorization
+- Insecure session configuration
+- Missing rate limiting & CORS issues
+- And 13+ more patterns...
+
+### Performance Analysis
+Identify bottlenecks and optimization opportunities:
+```bash
+# Analyze performance
+backend-agent analyze performance .
+
+# Save detailed report
+backend-agent analyze performance src/services --output perf-report.txt
+```
+
+**Detects:**
+- N+1 query problems
+- Missing pagination & indexes
+- Memory leaks (event listeners, large allocations)
+- Inefficient algorithms (O(n²) complexity)
+- Sequential awaits that should be parallel
+- Missing connection pooling
+- And 14+ more patterns...
+
+### Coverage Analysis
+Test coverage insights and suggestions:
+```bash
+# Analyze test coverage
+backend-agent analyze coverage
+
+# Set minimum threshold (exits with error if below)
+backend-agent analyze coverage --min-coverage 80
+```
+
+**Provides:**
+- Overall and per-file coverage metrics
+- Critical uncovered code identification
+- Prioritized test suggestions with scenarios
+- Example test code generation
+- Gap analysis (uncovered functions, branches, error paths)
 
 ## Safety Features
 

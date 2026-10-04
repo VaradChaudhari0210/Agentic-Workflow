@@ -693,4 +693,194 @@ analyzeCmd
     }
   });
 
+analyzeCmd
+  .command('arch')
+  .description('Analyze project architecture and generate documentation')
+  .argument('[repo-path]', 'Path to target repository', '.')
+  .option('--output <file>', 'Output file for documentation (default: stdout)')
+  .option('--format <format>', 'Output format: markdown or json', 'markdown')
+  .action(async (repoPath: string, options) => {
+    console.log(chalk.blue('\n╔══════════════════════════════════════════════════════════╗'));
+    console.log(chalk.blue('║') + chalk.bold('  Architecture Analysis') + chalk.blue('                              ║'));
+    console.log(chalk.blue('╚══════════════════════════════════════════════════════════╝\n'));
+    console.log(chalk.cyan('Target:'), repoPath);
+    console.log(chalk.dim('─'.repeat(60)) + '\n');
+
+    try {
+      const { ArchitectureDocumenterAgent } = await import('./agents/architecture-documenter.js');
+      const documenter = new ArchitectureDocumenterAgent(repoPath);
+
+      if (options.format === 'json') {
+        // Generate JSON report
+        const report = await documenter.generateArchitectureReport();
+        const json = JSON.stringify(report, null, 2);
+
+        if (options.output) {
+          const { writeFile: writeFileImport } = await import('fs/promises');
+          await writeFileImport(options.output, json);
+          console.log(chalk.green('✓ Report saved to:'), chalk.dim(options.output));
+        } else {
+          console.log(json);
+        }
+      } else {
+        // Generate markdown documentation
+        const documentation = await documenter.generateDocumentation();
+
+        if (options.output) {
+          const { writeFile: writeFileImport } = await import('fs/promises');
+          await writeFileImport(options.output, documentation);
+          console.log(chalk.green('✓ Documentation saved to:'), chalk.dim(options.output));
+        } else {
+          console.log('\n' + chalk.dim('─'.repeat(60)));
+          console.log(documentation);
+          console.log(chalk.dim('─'.repeat(60)) + '\n');
+        }
+      }
+
+      console.log(chalk.green('\n✓ Analysis complete!\n'));
+    } catch (error) {
+      console.error(chalk.red('\nError during analysis:'), error);
+      process.exit(1);
+    }
+  });
+
+// Security analysis command
+analyzeCmd
+  .command('security')
+  .description('Analyze code for security vulnerabilities')
+  .argument('[path]', 'Path to analyze', '.')
+  .option('--min-severity <level>', 'Minimum severity to report (low|medium|high|critical)', 'low')
+  .option('--output <file>', 'Save report to file')
+  .action(async (path: string, options) => {
+    console.log(chalk.blue('\n╔══════════════════════════════════════════════════════════╗'));
+    console.log(chalk.blue('║') + chalk.bold('  Security Analysis') + chalk.blue('                                  ║'));
+    console.log(chalk.blue('╚══════════════════════════════════════════════════════════╝\n'));
+    console.log(chalk.cyan('Target:'), path);
+    console.log(chalk.cyan('Min Severity:'), options.minSeverity);
+    console.log(chalk.dim('─'.repeat(60)) + '\n');
+
+    try {
+      const { SecuritySpecialist } = await import('./analyzers/security-specialist.js');
+      const specialist = new SecuritySpecialist({
+        path,
+        minSeverity: options.minSeverity,
+        includeFixes: true
+      });
+
+      const report = await specialist.analyze();
+      const formatted = specialist.formatReport(report);
+
+      if (options.output) {
+        const { writeFile } = await import('fs/promises');
+        await writeFile(options.output, formatted);
+        console.log(chalk.green('✓ Report saved to:'), chalk.dim(options.output));
+      } else {
+        console.log(formatted);
+      }
+
+      // Exit with error if critical issues found
+      if (report.summary.critical > 0) {
+        process.exit(1);
+      }
+    } catch (error) {
+      console.error(chalk.red('\nError during security analysis:'), error);
+      process.exit(1);
+    }
+  });
+
+// Performance analysis command
+analyzeCmd
+  .command('performance')
+  .description('Analyze code for performance issues')
+  .argument('[path]', 'Path to analyze', '.')
+  .option('--min-severity <level>', 'Minimum severity to report (low|medium|high|critical)', 'low')
+  .option('--output <file>', 'Save report to file')
+  .action(async (path: string, options) => {
+    console.log(chalk.blue('\n╔══════════════════════════════════════════════════════════╗'));
+    console.log(chalk.blue('║') + chalk.bold('  Performance Analysis') + chalk.blue('                              ║'));
+    console.log(chalk.blue('╚══════════════════════════════════════════════════════════╝\n'));
+    console.log(chalk.cyan('Target:'), path);
+    console.log(chalk.cyan('Min Severity:'), options.minSeverity);
+    console.log(chalk.dim('─'.repeat(60)) + '\n');
+
+    try {
+      const { PerformanceAnalyzer } = await import('./analyzers/performance-analyzer.js');
+      const analyzer = new PerformanceAnalyzer({
+        path,
+        minSeverity: options.minSeverity,
+        includeOptimizations: true
+      });
+
+      const report = await analyzer.analyze();
+      const formatted = analyzer.formatReport(report);
+
+      if (options.output) {
+        const { writeFile } = await import('fs/promises');
+        await writeFile(options.output, formatted);
+        console.log(chalk.green('✓ Report saved to:'), chalk.dim(options.output));
+      } else {
+        console.log(formatted);
+      }
+
+      // Exit with error if critical issues found
+      if (report.summary.critical > 0) {
+        process.exit(1);
+      }
+    } catch (error) {
+      console.error(chalk.red('\nError during performance analysis:'), error);
+      process.exit(1);
+    }
+  });
+
+// Coverage analysis command
+analyzeCmd
+  .command('coverage')
+  .description('Analyze test coverage and suggest improvements')
+  .option('--coverage-file <path>', 'Path to coverage report file')
+  .option('--output <file>', 'Save report to file')
+  .option('--min-coverage <number>', 'Minimum coverage threshold', '80')
+  .action(async (options) => {
+    const targetPath = process.cwd();
+    
+    console.log(chalk.blue('\n╔══════════════════════════════════════════════════════════╗'));
+    console.log(chalk.blue('║') + chalk.bold('  Coverage Analysis') + chalk.blue('                                  ║'));
+    console.log(chalk.blue('╚══════════════════════════════════════════════════════════╝\n'));
+    console.log(chalk.cyan('Target:'), targetPath);
+    if (options.coverageFile) {
+      console.log(chalk.cyan('Coverage File:'), options.coverageFile);
+    }
+    console.log(chalk.dim('─'.repeat(60)) + '\n');
+
+    try {
+      const { CoverageTracker } = await import('./analyzers/coverage-tracker.js');
+      const tracker = new CoverageTracker({
+        path: targetPath,
+        coverageFile: options.coverageFile,
+        minCoverage: parseInt(options.minCoverage),
+        includeSuggestions: true,
+        maxSuggestions: 20
+      });
+
+      const report = await tracker.analyze();
+      const formatted = tracker.formatReport(report);
+
+      if (options.output) {
+        const { writeFile } = await import('fs/promises');
+        await writeFile(options.output, formatted);
+        console.log(chalk.green('✓ Report saved to:'), chalk.dim(options.output));
+      } else {
+        console.log(formatted);
+      }
+
+      // Exit with error if coverage below threshold
+      if (report.score < parseInt(options.minCoverage)) {
+        console.log(chalk.yellow(`\n⚠️  Coverage (${report.score}%) is below threshold (${options.minCoverage}%)`));
+        process.exit(1);
+      }
+    } catch (error) {
+      console.error(chalk.red('\nError during coverage analysis:'), error);
+      process.exit(1);
+    }
+  });
+
 program.parse();
